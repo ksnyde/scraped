@@ -1,0 +1,21 @@
+{
+  "name": "scraped-lib",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The scraped Crate",
+  "scripts": {
+    "build": "cargo build",
+    "test": "cargo test",
+    "lint": "cargo clippy"
+  },
+  "author": "Ken Snyder <ken@ken.net>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yankeeinlondon/scraped.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yankeeinlondon/scraped/issues"
+  },
+  "homepage": "https://github.com/yankeeinlondon/scraped#readme"
+}

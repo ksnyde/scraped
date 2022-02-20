@@ -1,0 +1,19 @@
+{
+  "name": "scraped-cli",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The Rust CLI using native-only binary and Rust's Clasp",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Ken Snyder <ken@ken.net>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yankeeinlondon/scraped.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yankeeinlondon/scraped/issues"
+  },
+  "homepage": "https://github.com/yankeeinlondon/scraped#readme"
+}
