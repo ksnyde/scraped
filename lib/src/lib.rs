@@ -1,5 +1,8 @@
-use color_eyre::{eyre::eyre, eyre::Report, Result};
-use error::ScrapedError;
+use color_eyre::{
+    eyre::eyre,
+    eyre::{Report, WrapErr},
+    Result,
+};
 use lazy_static::lazy_static;
 use regex::Regex;
 use results::ParseResults;
@@ -11,14 +14,16 @@ use tokio_stream::StreamExt;
 use url::Url;
 
 mod elements;
-pub mod error;
 pub mod results;
 pub mod selection;
 mod util;
 
 /// receives an unvalidated String and returns a validated Url
-fn parse_url(url: &str) -> Result<Url, ScrapedError> {
-    return Url::parse(url).map_err(|from| ScrapedError::InvalidUrl(from));
+fn parse_url(url: &str) -> Result<Url, Report> {
+    Url::parse(url).map_err(|e| eyre!(e)).context(format!(
+        "Failed to parse the URL string recieved: {}",
+        url.to_string()
+    ))
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -39,7 +44,7 @@ impl From<&Url> for Document {
 }
 
 impl Document {
-    pub fn new(url: &str) -> Result<Document, ScrapedError> {
+    pub fn new(url: &str) -> Result<Document> {
         Ok(Document {
             url: parse_url(url)?,
             data: None,
@@ -71,7 +76,7 @@ pub struct LoadedDocument {
 }
 
 impl LoadedDocument {
-    pub fn new(url: &str, data: &str) -> Result<LoadedDocument, ScrapedError> {
+    pub fn new(url: &str, data: &str) -> Result<LoadedDocument> {
         Ok(LoadedDocument {
             url: parse_url(url)?,
             data: data.to_string(),
@@ -79,7 +84,7 @@ impl LoadedDocument {
     }
 
     /// parses a `LoadedDocument` into a `ParsedDoc`
-    pub fn parse_document(&self) -> Result<ParsedDoc, ScrapedError> {
+    pub fn parse_document(&self) -> Result<ParsedDoc> {
         ParsedDoc::new(&self)
     }
 
@@ -184,9 +189,9 @@ pub struct ParsedDoc {
 }
 
 impl ParsedDoc {
-    pub fn new(doc: &LoadedDocument) -> Result<ParsedDoc, ScrapedError> {
+    pub fn new(doc: &LoadedDocument) -> Result<ParsedDoc> {
         Ok(ParsedDoc {
-            url: doc.url,
+            url: doc.url.clone(),
             html: Html::parse_document(&doc.data),
             selectors: HashMap::new(),
             child_selectors: vec![],

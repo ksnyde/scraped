@@ -25,15 +25,18 @@ fn document_from_url() {
     assert_eq!(Document::from(&url), Document { url, data: None });
 }
 
+#[test]
 fn single_selector_matches() {
     let url = String::from("https://dev.null");
     let contents =
         fs::read_to_string("tests/fixtures/simple-doc.html").expect("Problem reading fixture file");
-    let doc = LoadedDocument::new(&url, &contents)?
-        .parse_document()?
+    let doc = LoadedDocument::new(&url, &contents)
+        .expect("LoadedDoc prepped")
+        .parse_document()
+        .expect("LoadedDoc parsed")
         .add_generic_selectors();
-    let result = doc.get("h1");
-    assert_eq()
+    let _result = doc.get("h1");
+    // assert_eq()
 }
 
 // fn single_selector_without_match() {
