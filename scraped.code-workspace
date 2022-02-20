@@ -1,0 +1,28 @@
+{
+  "folders": [
+    {
+      "name": "🦀 lib",
+      "path": "lib"
+    },
+    {
+      "name": "📦 cli",
+      "path": "cli"
+    },
+    {
+      "name": "🌎 wasm",
+      "path": "wasm"
+    },
+    {
+      "name": "📓 docs",
+      "path": "docs"
+    },
+    {
+      "name": "✨ root",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "monorepoWorkspace.includeRoot": true,
+    "i18n-ally.keystyle": "nested"
+  }
+}

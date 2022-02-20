@@ -1,0 +1,20 @@
+[package]
+name = "scraped-cli"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "scraped"
+path = "src/main.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+clap = { version = "3.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+color-eyre = "0.6.0"
+
+scraped = { path = "../lib" }
