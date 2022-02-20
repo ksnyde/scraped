@@ -1,5 +1,5 @@
 {
-  "name": "scraped-wasm",
+  "name": "@scraped/wasm",
   "private": true,
   "version": "0.1.0",
   "description": "The scraped library transpiled to WASM and wrapped with TS using Wasmtime",
