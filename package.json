@@ -5,6 +5,7 @@
   "description": "A web scraping utility built in Rust",
   "scripts": {
     "change": "pnpm changeset",
+    "version": "pnpm changeset version",
     "build:cli": "pnpm -C cli run build",
     "build:lib": "pnpm -C lib run build",
     "test:lib": "pnpm -C lib run test",

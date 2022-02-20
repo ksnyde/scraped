@@ -1,0 +1,18 @@
+{
+  "name": "@scraped/docs",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Documentation for the scraped crate and CLI",
+  "scripts": {},
+  "author": "Ken Snyder <ken@ken.net>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yankeeinlondon/scraped.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yankeeinlondon/scraped/issues"
+  },
+  "homepage": "https://github.com/yankeeinlondon/scraped#readme",
+  "devDependencies": {}
+}
