@@ -1,4 +1,4 @@
-use color_eyre::{eyre::eyre, eyre::Report, Section, SectionExt};
+use color_eyre::{eyre::eyre, eyre::Report, Result};
 use error::ScrapedError;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -21,7 +21,7 @@ fn parse_url(url: &str) -> Result<Url, ScrapedError> {
     return Url::parse(url).map_err(|from| ScrapedError::InvalidUrl(from));
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct Document {
     /// The URL where the html document can be found
     #[serde(serialize_with = "util::url_to_string")]
@@ -29,12 +29,21 @@ pub struct Document {
     pub data: Option<String>,
 }
 
+impl From<&Url> for Document {
+    fn from(url: &Url) -> Self {
+        Document {
+            url: url.clone(),
+            data: None,
+        }
+    }
+}
+
 impl Document {
     pub fn new(url: &str) -> Result<Document, ScrapedError> {
-        match parse_url(url) {
-            Ok(url) => Ok(Document { url, data: None }),
-            Err(e) => Err(e),
-        }
+        Ok(Document {
+            url: parse_url(url)?,
+            data: None,
+        })
     }
 
     /// Loads the HTTP page over the network and saves as a string
@@ -61,20 +70,17 @@ pub struct LoadedDocument {
     pub data: String,
 }
 
-pub enum UrlInput {
-    Url(Url),
-    String(String),
-}
-
 impl LoadedDocument {
-    pub fn new(url: UrlInput, data: String) -> Result<LoadedDocument, ScrapedError> {
-        match url {
-            UrlInput::String(url) => Ok(LoadedDocument {
-                url: parse_url(&url)?,
-                data,
-            }),
-            UrlInput::Url(url) => Ok(LoadedDocument { url, data }),
-        }
+    pub fn new(url: &str, data: &str) -> Result<LoadedDocument, ScrapedError> {
+        Ok(LoadedDocument {
+            url: parse_url(url)?,
+            data: data.to_string(),
+        })
+    }
+
+    /// parses a `LoadedDocument` into a `ParsedDoc`
+    pub fn parse_document(&self) -> Result<ParsedDoc, ScrapedError> {
+        ParsedDoc::new(&self)
     }
 
     /// Parses into a `ParsedDoc` and then adds selectors intended to suit the `docs.rs` site.
@@ -125,27 +131,39 @@ pub enum ChildScope {
 ///
 /// Note: in the case of a "relative path", this function will
 /// modify this to be a fully qualified path
-fn validate_child_href(href: &str, scope: &ChildScope, current_page: &str) -> Option<String> {
+fn validate_child_href(href: &str, scope: &ChildScope, current_page: &Url) -> Option<Url> {
     lazy_static! {
         static ref REL: Regex = Regex::new(r"^[\w\.#]+$").unwrap();
     }
 
-    match (
+    let url = match (
         href,
         scope,
         href.starts_with("http"),
         href.starts_with("file"),
         REL.captures(href).is_some(),
     ) {
-        (_, ChildScope::All(), false, false, true) => Some([current_page, href].join("/")),
+        (_, ChildScope::All(), false, false, true) => {
+            Some([&current_page.to_string(), href].join("/"))
+        }
         (_, ChildScope::All(), _, _, _) => Some(href.to_string()),
         (_, ChildScope::Http(), true, _, _) => Some(href.to_string()),
         (_, ChildScope::Http(), false, _, _) => None,
         (_, ChildScope::File(), _, true, _) => Some(href.to_string()),
         (_, ChildScope::File(), _, false, _) => None,
-        (_, ChildScope::Relative(), _, _, true) => Some([current_page, href].join("/")),
+        (_, ChildScope::Relative(), _, _, true) => {
+            Some([&current_page.to_string(), href].join("/"))
+        }
 
         _ => None,
+    }?;
+
+    match parse_url(&url) {
+        Ok(url) => Some(url),
+        Err(_e) => {
+            // on error just log the problem to console and return None to skip child
+            None
+        }
     }
 }
 
@@ -154,7 +172,7 @@ fn validate_child_href(href: &str, scope: &ChildScope, current_page: &str) -> Op
 /// evaluated when calling `get(selector)` or when exporting as
 /// a JSON payload.
 pub struct ParsedDoc {
-    pub url: String,
+    pub url: Url,
     pub html: Html,
     /// a hash of selectors which will be lazily evaluated when
     /// converting to a JSON output or when calling `get(selector)`
@@ -166,14 +184,15 @@ pub struct ParsedDoc {
 }
 
 impl ParsedDoc {
-    pub fn new(url: String, html: Html) -> ParsedDoc {
-        ParsedDoc {
-            url,
-            html,
+    pub fn new(doc: &LoadedDocument) -> Result<ParsedDoc, ScrapedError> {
+        Ok(ParsedDoc {
+            url: doc.url,
+            html: Html::parse_document(&doc.data),
             selectors: HashMap::new(),
             child_selectors: vec![],
-        }
+        })
     }
+
     /// Adds some useful but generic selectors which includes:
     ///
     /// - `title`
@@ -251,7 +270,7 @@ impl ParsedDoc {
     /// 1. it is included in a call to `child_selectors(["foo", "bar"], scope)`
     /// 2. has a `href` property defined
     /// 3. the "scope" of the href first that defined in call to `child_selectors`
-    pub fn get_child_urls(&self) -> Vec<String> {
+    pub fn get_child_urls(&self) -> Vec<Url> {
         let mut children = Vec::new();
 
         for (name, selector) in &self.selectors {
@@ -288,7 +307,7 @@ impl ParsedDoc {
         children
     }
 
-    /// Streams in child HTML pages and parses them into `ParsedDoc`
+    /// Streams in the child HTML pages and parses them into `ParsedDoc`
     /// structs.
     pub async fn get_children(&self) -> Result<Vec<ParseResults>, Report> {
         let urls = self.get_child_urls();
@@ -296,19 +315,9 @@ impl ParsedDoc {
         let mut stream = tokio_stream::iter(urls);
 
         while let Some(v) = stream.next().await {
-            let doc = Document::new(&v);
-            match doc {
-                Ok(doc) => {
-                    let child = doc.load_document().await.unwrap().for_docs_rs();
-                    children.push(child.results());
-                }
-                Err(_) => {
-                    println!(
-                        "- the child node's URL '{}' is invalid and will be ignored",
-                        &v
-                    );
-                }
-            }
+            let doc = Document::from(&v);
+            let child = doc.load_document().await.unwrap().for_docs_rs();
+            children.push(child.results());
         }
 
         Ok(children)
@@ -350,6 +359,11 @@ impl ParsedDoc {
 
 impl From<LoadedDocument> for ParsedDoc {
     fn from(doc: LoadedDocument) -> Self {
-        ParsedDoc::new(doc.url.to_string(), Html::parse_document(&doc.data))
+        ParsedDoc {
+            url: doc.url,
+            html: Html::parse_document(&doc.data),
+            selectors: HashMap::new(),
+            child_selectors: vec![],
+        }
     }
 }
