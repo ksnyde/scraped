@@ -345,7 +345,7 @@ impl ParsedDoc {
             });
 
         ParseResults {
-            url: self.url.to_string(),
+            url: self.url.clone(),
             data,
             props: HashMap::new(),
             children: vec![],

@@ -33,7 +33,7 @@ struct Args {
     config: Option<PathBuf>,
 }
 
-use scraped::Document;
+use scraped::{results::FlatResult, Document};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -55,10 +55,20 @@ async fn main() -> Result<()> {
         }
         (Some(v), true) => {
             println!(
-                "- Loading and parsing {} child nodes",
-                &doc.get_child_urls().len()
+                "- Loading and parsing {} child nodes{}",
+                &doc.get_child_urls().len(),
+                if args.flatten { " [flatten] " } else { "" }
             );
-            let results = serde_json::to_string(&doc.results_graph().await?)?;
+
+            let results = match (args.follow, args.flatten) {
+                (true, true) => {
+                    let r = FlatResult::flatten(&doc.results_graph().await?);
+                    serde_json::to_string(&r)?
+                }
+                (true, false) => serde_json::to_string(&doc.results_graph().await?)?,
+                (false, _) => serde_json::to_string(&doc.results_graph().await?)?,
+            };
+
             fs::write(&v, results).await?;
         }
         _ => (),

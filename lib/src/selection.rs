@@ -99,7 +99,7 @@ pub enum SelectorKind {
     List(Selector),
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(untagged)]
 pub enum SelectionKind {
     /** a selector with a single DOM element as result */
