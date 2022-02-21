@@ -3,6 +3,8 @@ use scraper::{ElementRef, Selector};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use tracing::trace;
+use url::Url;
 
 /// A `Selection` captures the key characteristics of a part of the DOM tree that
 /// is intersection of an HTML document (`Html`) and a selector (`Selector`).
@@ -17,18 +19,22 @@ pub struct Selection {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub style: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     /// The `href` property, if present on the selected element
-    pub href: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub href: Option<String>,
+    /// the fully qualified URL for the page
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub full_href: Option<String>,
+
     /// The `src` property, if present on the selected element
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub src: Option<String>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     /// The plain text within the selected DOM element
-    pub text: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
     /// The innerHTML of the selected DOM element
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub html: Option<String>,
 
     /// While not a heavily used prop in the body of HTML it is very
@@ -59,6 +65,7 @@ impl Selection {
             style: None,
             name: None,
             href: None,
+            full_href: None,
             text: None,
             html: None,
             content: None,
@@ -72,23 +79,46 @@ impl Selection {
     }
 }
 
-impl From<ElementRef<'_>> for Selection {
-    fn from(el: ElementRef) -> Self {
-        let mut selection = Selection::new();
-        selection.id = elements::id(&el);
-        selection.class = elements::class(&el);
-        selection.style = elements::style(&el);
-        selection.text = elements::text(&el);
-        selection.html = elements::html(&el);
-        selection.href = elements::href(&el);
-        selection.name = elements::name(&el);
-        selection.content = elements::content(&el);
-        selection.rel = elements::rel(&el);
-        selection.src = elements::src(&el);
-        selection.type_ = elements::type_(&el);
+pub fn get_selection(el: ElementRef, url: &Url) -> Selection {
+    let mut selection = Selection::new();
 
-        selection
-    }
+    selection.id = elements::id(&el);
+    selection.class = elements::class(&el);
+    selection.style = elements::style(&el);
+    selection.text = elements::text(&el);
+    selection.html = elements::html(&el);
+    selection.href = [elements::href(&el), elements::href_only_child(&el)]
+        .into_iter()
+        .flatten()
+        .next();
+    selection.full_href = match &selection.href {
+        Some(href) => {
+            if href.starts_with("http") {
+                Some(href.to_string())
+            } else {
+                let url = url.join(&href).expect("full url should be parsable");
+
+                Some(format!("{}", url))
+            }
+        }
+        _ => None,
+    };
+
+    selection.name = elements::name(&el);
+    selection.content = elements::content(&el);
+    selection.rel = elements::rel(&el);
+    selection.src = elements::src(&el);
+    selection.type_ = elements::type_(&el);
+    selection.disabled = elements::disabled(&el);
+
+    trace!(
+        "[{:?}] selection completed: {:?}, {:?}",
+        url.to_string(),
+        selection.full_href,
+        selection.text,
+    );
+
+    selection
 }
 
 #[derive(Debug)]
@@ -97,13 +127,4 @@ pub enum SelectorKind {
     Item(Selector),
     /** a selector with a _list_ of DOM elements as a result */
     List(Selector),
-}
-
-#[derive(Debug, Serialize, Clone)]
-#[serde(untagged)]
-pub enum SelectionKind {
-    /** a selector with a single DOM element as result */
-    Item(Box<Selection>),
-    /** a selector with a _list_ of DOM elements as a result */
-    List(Vec<Selection>),
 }
