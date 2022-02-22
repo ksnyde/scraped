@@ -12,7 +12,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
 use tokio_stream::StreamExt;
-use tracing::{info, instrument, trace, warn};
+use tracing::{debug, instrument, trace, warn};
 use url::Url;
 
 mod elements;
@@ -173,6 +173,10 @@ fn validate_child_href(href: &str, scope: &ChildScope, current_page: &Url) -> Op
     }
 }
 
+/// a callback function which is provided a hashmap of all resultant _selectors_
+/// and is expected to turn that into a meaningup JSON-based result.
+pub type PropertyCallback = fn(sel: &HashMap<String, ResultKind>) -> Value;
+
 /// A `Document` which has been loaded from the network and parsed
 /// into a DOM tree. You can add "selectors" which will be lazily
 /// evaluated when calling `get(selector)` or when exporting as
@@ -189,7 +193,7 @@ pub struct ParsedDoc {
     child_selectors: Vec<(String, ChildScope)>,
     /// a dictionary of user defined callbacks which leverage the
     /// selectors as input to produce clean outcomes
-    properties: HashMap<String, fn(sel: &HashMap<String, ResultKind>) -> Value>,
+    properties: HashMap<String, PropertyCallback>,
 }
 
 impl ParsedDoc {
@@ -273,35 +277,23 @@ impl ParsedDoc {
     ///
     /// **Note:** if a property of the same name of a selector exists then the
     /// the property will be given precedence; effectively masking the selector value
-    pub fn get(&self, name: &str) -> Result<Option<ResultKind>, Report> {
-        match (self.selectors.get(name), self.properties.get(name)) {
-            (_, Some(cb)) => {
-                trace!("getting {} as a property", name);
-                let selectors = self.get_selection_results();
-                let result = cb(&selectors);
-                Ok(Some(ResultKind::Property(result)))
-            }
-            (Some(SelectorKind::Item(v)), _) => {
-                if let Some(el) = self.html.select(&v).next() {
-                    trace!("getting {} as a SelectorKind::Item", name);
-                    Ok(Some(ResultKind::Item(Box::new(get_selection(
-                        el, &self.url,
-                    )))))
-                } else {
-                    Ok(None)
-                }
-            }
-            (Some(SelectorKind::List(v)), _) => {
-                trace!("getting {} as a SelectorKind::List", name);
+    pub fn get(&self, name: &str) -> Result<Option<ResultKind>> {
+        let selections = self.get_selection_results();
+        let properties = self
+            .get_property_results()
+            .expect("properties generated off of selection values");
 
-                Ok(Some(ResultKind::List(
-                    self.html
-                        .select(&v)
-                        .map(|el| get_selection(el, &self.url))
-                        .collect(),
-                )))
+        if let Some(v) = properties.get(name) {
+            Ok(Some(ResultKind::Property(v.clone())))
+        } else {
+            match selections.get(name) {
+                Some(v) => Ok(Some(v.clone())),
+                // None => v,
+                _ => Err(eyre!(format!(
+                    "could not find the '{}' selector",
+                    name.to_string()
+                ))),
             }
-            _ => return Err(eyre!("could not find the '{}' selector", name.to_string())),
         }
     }
 
@@ -356,7 +348,7 @@ impl ParsedDoc {
 
     /// Streams in the child HTML pages and parses them into `ParsedDoc`
     /// structs.
-    pub async fn get_children(&self) -> Result<Vec<ParseResults>, Report> {
+    pub async fn get_children(&self) -> Result<Vec<ParseResults>> {
         let urls = self.get_child_urls();
         trace!(
             "retrieving {} child URLs for {} over network",
@@ -370,67 +362,95 @@ impl ParsedDoc {
             let doc = Document::from(&v);
             let child = doc.load_document().await.unwrap().for_docs_rs();
             trace!("getting {}", &child.url);
-            children.push(child.results());
-            info!("finished loading {}", &child.url);
+            children.push(child.results()?);
+            trace!("finished loading child: {}", &v);
         }
 
         Ok(children)
     }
 
-    /// applies all _selector configuration_ on the current page content to arrive at
+    /// merges all _selectors_ configured with the current page content to arrive at
     /// selection _results_.
-    pub fn get_selection_results(&self) -> HashMap<String, ResultKind> {
+    fn get_selection_results(&self) -> HashMap<String, ResultKind> {
         let mut data: HashMap<String, ResultKind> = HashMap::new();
 
-        self.selectors
-            .iter()
-            .for_each(|(name, _)| match self.get(name) {
-                Ok(Some(v)) => {
-                    data.insert(name.to_string(), v);
+        self.selectors.iter().for_each(|(name, sel)| match sel {
+            SelectorKind::Item(sel) => {
+                trace!("getting selection item for {}", &name);
+                if let Some(el) = self.html.select(sel).next() {
+                    let result = Box::new(get_selection(el, &self.url));
+                    data.insert(name.to_string(), ResultKind::Item(result));
+                } else {
+                    // skip
                 }
-                _ => {
-                    eyre!("Problem inserting the results for the selector '{}'.", name,);
-                }
-            });
+            }
+            SelectorKind::List(sel) => {
+                trace!("getting selection list for {}", &name);
+                data.insert(
+                    name.to_string(),
+                    ResultKind::List(
+                        self.html
+                            .select(sel)
+                            .map(|el| get_selection(el, &self.url))
+                            .collect(),
+                    ),
+                );
+            }
+        });
 
         data
     }
 
     /// provides the _selector results to all property callbacks and returns a hashmap of
     /// _property values_.
-    pub fn get_property_results(&self) -> Result<HashMap<String, Value>> {
-        let selectors = self.get_selection_results();
+    fn get_property_results(&self) -> Result<HashMap<String, Value>> {
+        trace!("getting property results");
+        let selections = self.get_selection_results();
+        trace!("all document selections evaluted");
         let mut results: HashMap<String, Value> = HashMap::new();
+        trace!("current selections have been loaded; ready to evaluate property callbacks");
+
         self.properties.keys().for_each(|k| {
+            trace!("evaluating property '{}'", k);
             let cb = self.properties.get(k);
             if let Some(cb) = cb {
-                results.insert(k.to_string(), cb(&selectors));
+                trace!("callback was found for '{}'", k);
+                results.insert(k.to_string(), cb(&selections));
+                debug!(
+                    "value for property '{}' inserted into results hashmap: {:?}",
+                    k,
+                    cb(&selections)
+                );
             }
         });
+        trace!("all properties have been captured in hashmap");
 
         Ok(results)
     }
 
     /// Returns all _selectors_ and _properties_ on the current page without recursing
     /// into child pages.
-    pub fn results(&self) -> ParseResults {
+    pub fn results(&self) -> Result<ParseResults> {
+        trace!("getting results for {}", self.url);
         let data = self.get_selection_results();
-        let props = self
-            .get_property_results()
-            .expect("properties were not ready");
+        let props = self.get_property_results()?;
+        trace!(
+            "selectors and props have been retrieved for results: {:?}",
+            props
+        );
 
-        ParseResults {
+        Ok(ParseResults {
             url: self.url.clone(),
             data,
             props,
             children: vec![],
-        }
+        })
     }
 
     /// Returns a tree of `ParseResults` starting with the given URL and
     /// then following into the children nodes (one level deep).
     pub async fn results_graph(&self) -> Result<ParseResults, Report> {
-        let mut current_page = self.results();
+        let mut current_page = self.results()?;
         current_page.children = self.get_children().await?;
 
         Ok(current_page)

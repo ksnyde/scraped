@@ -6,6 +6,7 @@
   "scripts": {
     "build": "cargo build",
     "lint": "cargo clippy",
+    "publish": "cargo build --release",
     "test": "cargo test"
   },
   "author": "Ken Snyder <ken@ken.net>",

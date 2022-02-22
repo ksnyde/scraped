@@ -54,7 +54,8 @@ fn static_property_definition_available_in_results() {
         .parse_document()
         .expect("ParsedDoc created")
         .add_property("hello", |_| json!("world"))
-        .results();
+        .results()
+        .expect("results successfully extracted");
 
     assert_some!(results.props.get("hello"));
     let hello = results.props.get("hello").expect("hello prop exists");

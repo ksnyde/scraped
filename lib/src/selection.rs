@@ -96,7 +96,7 @@ pub fn get_selection(el: ElementRef, url: &Url) -> Selection {
             if href.starts_with("http") {
                 Some(href.to_string())
             } else {
-                let url = url.join(&href).expect("full url should be parsable");
+                let url = url.join(href).expect("full url should be parsable");
 
                 Some(format!("{}", url))
             }

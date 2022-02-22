@@ -3,8 +3,7 @@ use color_eyre::Result;
 use serde_json::json;
 use std::path::PathBuf;
 use tokio::fs;
-use tracing::{debug, info, Level};
-use tracing_subscriber::FmtSubscriber;
+use tracing::{debug, info};
 // use config;
 
 #[derive(Parser, Debug)]
@@ -35,19 +34,19 @@ struct Args {
     config: Option<PathBuf>,
 }
 
-use scraped::{results::FlatResult, Document};
+use scraped::{results::FlatResult, Document, PropertyCallback};
+mod show;
+use show::show;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // let format = tracing_subscriber::fmt::format().compact();
+    tracing_subscriber::fmt::init();
+    // LogTracer::init()?;
     color_eyre::install()?;
-    let subscriber = FmtSubscriber::builder()
-        // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
-        // will be written to stdout.
-        .with_max_level(Level::INFO)
-        // completes the builder.
-        .finish();
-    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
-    info!("starting scraped CLI");
+
+    let title: PropertyCallback =
+        |r| json!([r.get("title"), r.get("h1")].into_iter().flatten().next());
 
     let args = Args::parse();
     debug!("CLI arguments parsed {:?}", args);
@@ -56,13 +55,16 @@ async fn main() -> Result<()> {
         .load_document()
         .await?
         .for_docs_rs()
-        .add_property("title", |_s| json!("foo"))
-        .add_generic_selectors();
+        .add_generic_selectors()
+        .add_property("title", title);
+
     println!("- Parsed {} ", &args.url);
+
+    show(&doc, &args.show)?;
 
     match (&args.output, args.follow) {
         (Some(v), false) => {
-            let results = serde_json::to_string(&doc.results())?;
+            let results = serde_json::to_string(&doc.results()?)?;
             fs::write(&v, results).await?;
         }
         (Some(v), true) => {
@@ -85,6 +87,8 @@ async fn main() -> Result<()> {
         }
         _ => (),
     }
+
+    info!("completed CLI command");
 
     Ok(())
 }

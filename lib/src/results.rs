@@ -6,7 +6,7 @@ use std::{
 use url::Url;
 
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::selection::Selection;
 
@@ -14,11 +14,21 @@ use crate::selection::Selection;
 #[serde(untagged)]
 pub enum ResultKind {
     /** a selector with a single DOM element as result */
+    #[serde(serialize_with = "crate::util::serialize_selection")]
     Item(Box<Selection>),
     /** a selector with a _list_ of DOM elements as a result */
+    #[serde(serialize_with = "crate::util::serialize_selection_list")]
     List(Vec<Selection>),
-
     Property(Value),
+}
+
+impl Display for ResultKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match &self {
+            ResultKind::Property(_) => write!(f, "{}", &self),
+            _ => write!(f, "{}", json!(&self).to_string()),
+        }
+    }
 }
 
 /// A recursive structure which provides the `url` and all top level
