@@ -1,7 +1,7 @@
 {
   "name": "@scraped/cli",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The Rust CLI using native-only binary and Rust's Clasp",
   "scripts": {
     "build": "cargo build",
