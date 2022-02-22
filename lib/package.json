@@ -1,10 +1,11 @@
 {
   "name": "@scraped/lib",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The scraped Crate",
   "scripts": {
     "build": "cargo build",
+    "publish": "cargo build --release",
     "test": "cargo test",
     "lint": "cargo clippy"
   },

@@ -22,6 +22,15 @@ pub fn href(el: &ElementRef) -> Option<String> {
     el.value().attr("href").map(|v| v.to_string())
 }
 
+/// Returns the `href` property of the child element
+/// of the node if it's the _only_ child node.
+pub fn href_only_child(el: &ElementRef) -> Option<String> {
+    match (el.first_child(), el.first_child() == el.last_child()) {
+        (Some(child), true) => Some(child.value().as_element()?.attr("href")?.to_string()),
+        _ => None,
+    }
+}
+
 pub fn text(el: &ElementRef) -> Option<String> {
     let text = el.text().collect::<String>();
 

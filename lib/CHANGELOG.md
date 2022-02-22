@@ -1,5 +1,16 @@
 # @scraped/lib
 
+## 0.3.0
+
+### Minor Changes
+
+- 3a83e63: Introduce starting point for a logging strategy
+- 3a83e63: Added the "property" feature to the scraper which allows cross-selector reporting
+
+### Patch Changes
+
+- 9d97213: Moved toward color_eyre error reporting instead of ScrapedError enum
+
 ## 0.2.0
 
 ### Minor Changes

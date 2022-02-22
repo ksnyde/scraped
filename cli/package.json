@@ -1,10 +1,13 @@
 {
   "name": "@scraped/cli",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "The Rust CLI using native-only binary and Rust's Clasp",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "cargo build",
+    "lint": "cargo clippy",
+    "publish": "cargo build --release",
+    "test": "cargo test"
   },
   "author": "Ken Snyder <ken@ken.net>",
   "license": "MIT",

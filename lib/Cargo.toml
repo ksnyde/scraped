@@ -16,10 +16,9 @@ serde_json = "1.0"
 regex = "1.5"
 lazy_static = "1.4"
 url = "2.2"
-url_serde = "0.2"
-thiserror = "1"
 color-eyre = "0.6.0"
 dotenv = "0.15.0"
+tracing = "0.1"
 
 [dev-dependencies]
 claim = "0.5.0"
