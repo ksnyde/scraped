@@ -1,11 +1,13 @@
 use clap::Parser;
 use color_eyre::Result;
+use serde_json::json;
 use std::path::PathBuf;
 use tokio::fs;
-
+use tracing::{debug, info, Level};
+use tracing_subscriber::FmtSubscriber;
 // use config;
 
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct Args {
     /// The URL to inspect
@@ -38,13 +40,23 @@ use scraped::{results::FlatResult, Document};
 #[tokio::main]
 async fn main() -> Result<()> {
     color_eyre::install()?;
+    let subscriber = FmtSubscriber::builder()
+        // all spans/events with a level higher than TRACE (e.g, debug, info, warn, etc.)
+        // will be written to stdout.
+        .with_max_level(Level::INFO)
+        // completes the builder.
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+    info!("starting scraped CLI");
 
     let args = Args::parse();
+    debug!("CLI arguments parsed {:?}", args);
 
     let doc = Document::new(&args.url)?
         .load_document()
         .await?
         .for_docs_rs()
+        .add_property("title", |_s| json!("foo"))
         .add_generic_selectors();
     println!("- Parsed {} ", &args.url);
 

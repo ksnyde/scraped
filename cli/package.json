@@ -4,7 +4,9 @@
   "version": "0.2.0",
   "description": "The Rust CLI using native-only binary and Rust's Clasp",
   "scripts": {
-    "build": "cargo build"
+    "build": "cargo build",
+    "lint": "cargo clippy",
+    "test": "cargo test"
   },
   "author": "Ken Snyder <ken@ken.net>",
   "license": "MIT",

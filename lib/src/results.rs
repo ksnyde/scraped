@@ -8,7 +8,18 @@ use url::Url;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::selection::SelectionKind;
+use crate::selection::Selection;
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(untagged)]
+pub enum ResultKind {
+    /** a selector with a single DOM element as result */
+    Item(Box<Selection>),
+    /** a selector with a _list_ of DOM elements as a result */
+    List(Vec<Selection>),
+
+    Property(Value),
+}
 
 /// A recursive structure which provides the `url` and all top level
 /// selectors on a given page as `data` and then optionally recurses
@@ -19,7 +30,7 @@ pub struct ParseResults {
     #[serde(serialize_with = "crate::util::url_to_string")]
     pub url: Url,
     /// The raw data extracted from the CSS selectors specified.
-    pub data: HashMap<String, SelectionKind>,
+    pub data: HashMap<String, ResultKind>,
     /// Abstracted properties derived from `data` and converted to
     /// abstract JSON representation for serialization.s
     pub props: HashMap<String, Value>,
@@ -40,7 +51,7 @@ pub struct FlatResult {
     #[serde(serialize_with = "crate::util::url_to_string")]
     pub url: Url,
     /// The raw data extracted from the CSS selectors specified.
-    pub data: HashMap<String, SelectionKind>,
+    pub data: HashMap<String, ResultKind>,
     /// Abstracted properties derived from `data` and converted to
     /// abstract JSON representation for serialization.s
     pub props: HashMap<String, Value>,

@@ -5,6 +5,7 @@
   "description": "The scraped Crate",
   "scripts": {
     "build": "cargo build",
+    "publish": "cargo build --release",
     "test": "cargo test",
     "lint": "cargo clippy"
   },

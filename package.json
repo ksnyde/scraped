@@ -6,10 +6,16 @@
   "scripts": {
     "change": "pnpm changeset",
     "version": "pnpm changeset version",
+    "build": "run-s build:lib build:cli",
     "build:cli": "pnpm -C cli run build",
     "build:lib": "pnpm -C lib run build",
+    "publish": "run-s publish:lib",
+    "publish:lib": "pnpm -C lib run publish",
+    "test": "run-p test:lib",
     "test:lib": "pnpm -C lib run test",
-    "lint:lib": "pnpm -C lib run lint"
+    "lint": "run-p lint:*",
+    "lint:lib": "pnpm -C lib run lint",
+    "lint:cli": "pnpm -C lib cli lint"
   },
   "author": "Ken Snyder <ken@ken.net>",
   "license": "MIT",
