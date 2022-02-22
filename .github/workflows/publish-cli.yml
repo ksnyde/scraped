@@ -1,0 +1,72 @@
+name: Build and upload
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to use for release'
+        required: false
+  #TODO: read push commit name for release name
+  #push:
+  #  branches:
+  #    - 'release/**'
+
+jobs:
+  build:
+    name: Build and upload native cli for ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-18.04
+            file: scraped
+            target: x86_64-unknown-linux-gnu
+            asset_name: scraped-linux-x86_64
+          - os: windows-latest
+            file: scraped.exe
+            target: x86_64-pc-windows-msvc
+            asset_name: scraped-windows-x86_64.exe
+          - os: macos-latest
+            file: scraped
+            target: x86_64-apple-darwin
+            asset_name: scraped-macos-x86_64
+          - os: macos-latest
+            file: scraped
+            target: aarch64-apple-darwin
+            asset_name: scraped-macos-aarch64
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          default: true
+          override: true
+          toolchain: stable
+          target: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v1
+        with:
+          key: ${{ matrix.target }}
+          working-directory: cli
+
+      - name: Build
+        run: |
+          cd cli
+          cargo build --release --target ${{ matrix.target }}
+      - name: Strip binary
+        if: matrix.os != 'windows-latest'
+        run: |
+          cd cli/target/${{ matrix.target }}/release
+          strip -x scraped
+      - name: Upload
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: cli/target/${{ matrix.target }}/release/${{ matrix.file }}
+          tag: native-cli-${{ github.event.inputs.version }}
+          asset_name: ${{ matrix.asset_name }}
+          release_name: Native scraped cli ${{ github.event.inputs.version }}
+          overwrite: true
