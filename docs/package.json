@@ -1,11 +1,9 @@
 {
-  "name": "@scraped/wasm",
+  "name": "@scraped/docs",
   "private": true,
   "version": "0.1.0",
-  "description": "The scraped library transpiled to WASM and wrapped with TS using Wasmtime",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+  "description": "Documentation for the scraped crate and CLI",
+  "scripts": {},
   "author": "Ken Snyder <ken@ken.net>",
   "license": "MIT",
   "repository": {
@@ -15,5 +13,6 @@
   "bugs": {
     "url": "https://github.com/yankeeinlondon/scraped/issues"
   },
-  "homepage": "https://github.com/yankeeinlondon/scraped#readme"
+  "homepage": "https://github.com/yankeeinlondon/scraped#readme",
+  "devDependencies": {}
 }
