@@ -1,6 +1,6 @@
 use clap::Parser;
 use color_eyre::Result;
-use serde_json::json;
+use serde_json::{json, Value};
 use std::path::PathBuf;
 use tokio::fs;
 use tracing::{debug, info};
@@ -45,8 +45,23 @@ async fn main() -> Result<()> {
     // LogTracer::init()?;
     color_eyre::install()?;
 
-    let title: PropertyCallback =
-        |r| json!([r.get("title"), r.get("h1")].into_iter().flatten().next());
+    let title: PropertyCallback = |r| {
+        let title = r
+            .get("title")
+            .expect("The title selector should exist")
+            .get("text");
+        let h1 = r //
+            .get("h1")
+            .expect("The title selector should exist")
+            .get("text");
+
+        let choices: Vec<&Value> = vec![&h1, &title]
+            .into_iter()
+            .filter(|i| !Value::is_null(*i))
+            .collect();
+
+        json!(choices.first())
+    };
 
     let args = Args::parse();
     debug!("CLI arguments parsed {:?}", args);
