@@ -3,8 +3,7 @@ use color_eyre::{
     eyre::{Report, WrapErr},
     Result,
 };
-use lazy_static::lazy_static;
-use regex::Regex;
+
 use results::{ParseResults, ResultKind};
 use scraper::{Html, Selector};
 use selection::{get_selection, SelectorKind};
@@ -15,7 +14,6 @@ use tokio_stream::StreamExt;
 use tracing::{debug, instrument, trace, warn};
 use url::Url;
 
-mod elements;
 pub mod results;
 pub mod selection;
 mod util;
@@ -94,6 +92,7 @@ impl LoadedDocument {
         ParsedDoc::from(self)
             .add_selector("h1", "h1 .in-band a")
             .add_selector_all("h2", "h2")
+            .add_selector("description", ".docblock")
             .add_selector_all("modules", ".module-item a.mod")
             .add_selector_all("structs", ".module-item a.struct")
             .add_selector_all("functions", ".module-item a.fn")
@@ -130,47 +129,6 @@ pub enum ChildScope {
     /// (e.g., file, Javascript calls, ...) are excluded
     Http(),
     File(),
-}
-
-/// validates that the scoping rules allow the href value and
-/// returns Some(url) if in scope.
-///
-/// Note: in the case of a "relative path", this function will
-/// modify this to be a fully qualified path
-fn validate_child_href(href: &str, scope: &ChildScope, current_page: &Url) -> Option<Url> {
-    lazy_static! {
-        static ref REL: Regex = Regex::new(r"^[\w\.#]+$").unwrap();
-    }
-
-    let url = match (
-        href,
-        scope,
-        href.starts_with("http"),
-        href.starts_with("file"),
-        REL.captures(href).is_some(),
-    ) {
-        (_, ChildScope::All(), false, false, true) => {
-            Some([&current_page.to_string(), href].join("/"))
-        }
-        (_, ChildScope::All(), _, _, _) => Some(href.to_string()),
-        (_, ChildScope::Http(), true, _, _) => Some(href.to_string()),
-        (_, ChildScope::Http(), false, _, _) => None,
-        (_, ChildScope::File(), _, true, _) => Some(href.to_string()),
-        (_, ChildScope::File(), _, false, _) => None,
-        (_, ChildScope::Relative(), _, _, true) => {
-            Some([&current_page.to_string(), href].join("/"))
-        }
-
-        _ => None,
-    }?;
-
-    match parse_url(&url) {
-        Ok(url) => Some(url),
-        Err(_e) => {
-            // on error just log the problem to console and return None to skip child
-            None
-        }
-    }
 }
 
 /// a callback function which is provided a hashmap of all resultant _selectors_
@@ -279,9 +237,7 @@ impl ParsedDoc {
     /// the property will be given precedence; effectively masking the selector value
     pub fn get(&self, name: &str) -> Result<Option<ResultKind>> {
         let selections = self.get_selection_results();
-        let properties = self
-            .get_property_results()
-            .expect("properties generated off of selection values");
+        let properties = self.get_property_results();
 
         if let Some(v) = properties.get(name) {
             Ok(Some(ResultKind::Property(v.clone())))
@@ -289,10 +245,7 @@ impl ParsedDoc {
             match selections.get(name) {
                 Some(v) => Ok(Some(v.clone())),
                 // None => v,
-                _ => Err(eyre!(format!(
-                    "could not find the '{}' selector",
-                    name.to_string()
-                ))),
+                _ => Err(eyre!(format!("could not find the '{}' selector", name))),
             }
         }
     }
@@ -308,29 +261,33 @@ impl ParsedDoc {
         trace!("getting the child URLs for {}", self.url);
 
         for (name, selector) in &self.selectors {
-            if let Some((_, scope)) = self //
+            if let Some((_, _scope)) = self //
                 .child_selectors
                 .iter()
                 .find(|(s, _)| s == name)
             {
                 match selector {
-                    SelectorKind::List(v) => {
+                    SelectorKind::List(sel) => {
                         // iterate through all elements
-                        self.html.select(v).for_each(|c| {
-                            if let Some(href) = get_selection(c, &self.url).href {
-                                if let Some(href) = validate_child_href(&href, scope, &self.url) {
-                                    children.push(href);
-                                }
+                        self.html.select(sel).for_each(|c| {
+                            if let Some(Value::String(href)) =
+                                get_selection(c, &self.url).get("full_href")
+                            {
+                                let href = Url::parse(href)
+                                    .expect("string is expected to convert to a URL");
+                                children.push(href);
                             }
                         });
                     }
-                    SelectorKind::Item(v) => {
-                        if let Some(el) = self.html.select(v).next() {
-                            // if selector returned an element, get href prop (if avail)
-                            if let Some(href) = get_selection(el, &self.url).href {
-                                if let Some(v) = validate_child_href(&href, scope, &self.url) {
-                                    children.push(v)
-                                }
+                    SelectorKind::Item(sel) => {
+                        if let Some(el) = self.html.select(sel).next() {
+                            if let Some(Value::String(href)) =
+                                get_selection(el, &self.url).get("full_href")
+                            {
+                                let href = Url::parse(href)
+                                    .expect("string is expected to convert to a URL");
+
+                                children.push(href);
                             }
                         }
                     }
@@ -376,16 +333,18 @@ impl ParsedDoc {
 
         self.selectors.iter().for_each(|(name, sel)| match sel {
             SelectorKind::Item(sel) => {
-                trace!("getting selection item for {}", &name);
                 if let Some(el) = self.html.select(sel).next() {
                     let result = Box::new(get_selection(el, &self.url));
+                    debug!(
+                        "value detected for '{}' Item selector: {:?}",
+                        &name, &result
+                    );
                     data.insert(name.to_string(), ResultKind::Item(result));
                 } else {
-                    // skip
+                    debug!("no value detected '{}'", &name)
                 }
             }
             SelectorKind::List(sel) => {
-                trace!("getting selection list for {}", &name);
                 data.insert(
                     name.to_string(),
                     ResultKind::List(
@@ -395,6 +354,7 @@ impl ParsedDoc {
                             .collect(),
                     ),
                 );
+                debug!("Selection list for '{}' was: {:?}", &name, data.get(name));
             }
         });
 
@@ -403,10 +363,10 @@ impl ParsedDoc {
 
     /// provides the _selector results to all property callbacks and returns a hashmap of
     /// _property values_.
-    fn get_property_results(&self) -> Result<HashMap<String, Value>> {
+    fn get_property_results(&self) -> HashMap<String, Value> {
         trace!("getting property results");
         let selections = self.get_selection_results();
-        trace!("all document selections evaluted");
+        trace!("all document selections evaluated");
         let mut results: HashMap<String, Value> = HashMap::new();
         trace!("current selections have been loaded; ready to evaluate property callbacks");
 
@@ -425,7 +385,7 @@ impl ParsedDoc {
         });
         trace!("all properties have been captured in hashmap");
 
-        Ok(results)
+        results
     }
 
     /// Returns all _selectors_ and _properties_ on the current page without recursing
@@ -433,7 +393,7 @@ impl ParsedDoc {
     pub fn results(&self) -> Result<ParseResults> {
         trace!("getting results for {}", self.url);
         let data = self.get_selection_results();
-        let props = self.get_property_results()?;
+        let props = self.get_property_results();
         trace!(
             "selectors and props have been retrieved for results: {:?}",
             props

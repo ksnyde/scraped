@@ -1,122 +1,83 @@
-use crate::elements;
 use scraper::{ElementRef, Selector};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use tracing::trace;
 use url::Url;
 
-/// A `Selection` captures the key characteristics of a part of the DOM tree that
-/// is intersection of an HTML document (`Html`) and a selector (`Selector`).
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Selection {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub class: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub style: Option<String>,
+/// Gets all the name/value pairs available on the passed in DOM
+/// node and returns as a serde::Value enumeration
+pub fn get_selection(el: ElementRef, url: &Url) -> HashMap<String, Value> {
+    let mut selection: HashMap<String, Value> = HashMap::new();
+    let props = el.value().attrs();
+    let tag = el.value().name().to_string();
 
-    /// The `href` property, if present on the selected element
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub href: Option<String>,
-    /// the fully qualified URL for the page
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub full_href: Option<String>,
+    // add the DOM's tag name
+    selection.insert(String::from("tagName"), json!(tag));
 
-    /// The `src` property, if present on the selected element
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub src: Option<String>,
+    // extract all key/value pairs in DOM node
+    props.into_iter().for_each(|(k, v)| {
+        selection.insert(k.to_string(), Value::String(v.to_string()));
+    });
+    trace!(
+        "[{}] got key/value props on a DOM node: {:?}",
+        url,
+        selection
+    );
 
-    /// The plain text within the selected DOM element
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub text: Option<String>,
-    /// The innerHTML of the selected DOM element
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub html: Option<String>,
-
-    /// While not a heavily used prop in the body of HTML it is very
-    /// common to have this -- paired with "name" -- in the meta properties
-    /// of a page.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub content: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub rel: Option<String>,
-    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
-    pub type_: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub disabled: Option<bool>,
-
-    /// other -- less used props -- can still be stored
-    /// but they will be stored as a JSON hash value in
-    /// this `other` property to avoid too many props.
-    #[serde(skip_serializing_if = "HashMap::is_empty")]
-    pub other: HashMap<String, Value>,
-}
-
-impl Selection {
-    fn new() -> Self {
-        Selection {
-            id: None,
-            class: None,
-            style: None,
-            name: None,
-            href: None,
-            full_href: None,
-            text: None,
-            html: None,
-            content: None,
-            rel: None,
-            src: None,
-            type_: None,
-            disabled: None,
-
-            other: HashMap::new(),
-        }
+    // text and html
+    let text = el.text().collect::<String>();
+    if text.is_empty() {
+        selection.insert(String::from("text"), json!(text.trim().to_string()));
     }
-}
+    if !el.inner_html().is_empty() {
+        selection.insert(
+            String::from("html"),
+            json!(el.inner_html().trim().to_string()),
+        );
+    }
 
-pub fn get_selection(el: ElementRef, url: &Url) -> Selection {
-    let mut selection = Selection::new();
+    // synthesize other props conditionally
 
-    selection.id = elements::id(&el);
-    selection.class = elements::class(&el);
-    selection.style = elements::style(&el);
-    selection.text = elements::text(&el);
-    selection.html = elements::html(&el);
-    selection.href = [elements::href(&el), elements::href_only_child(&el)]
-        .into_iter()
-        .flatten()
-        .next();
-    selection.full_href = match &selection.href {
-        Some(href) => {
-            if href.starts_with("http") {
-                Some(href.to_string())
+    let image_formats = ["gif", "jpg", "jpeg", "avif", "webp", "ico", "tiff"];
+    // let doc_formats = ["doc", "docx", "pdf"];
+    // let data_formats = ["csv", "json", "txt", "xls"];
+    // let code_formats = ["js", "wasm"];
+    // let style_formats = ["css", "scss", "sass"];
+
+    if let Some(Value::String(href)) = selection.get("href") {
+        if href.starts_with("http") {
+            let href = href.to_string();
+            selection.insert(String::from("hrefType"), json!("absolute"));
+            selection.insert(String::from("full_href"), json!(href));
+        } else {
+            let href = href.to_string();
+            let url = url.join(&href).expect("full url should be parsable");
+            if href.is_empty() {
+                selection.insert(String::from("hrefType"), json!("empty"));
             } else {
-                let url = url.join(href).expect("full url should be parsable");
-
-                Some(format!("{}", url))
+                selection.insert(String::from("hrefType"), json!("relative"));
+                selection.insert(String::from("full_href"), json!(format!("{}", url)));
             }
         }
-        _ => None,
-    };
+        trace!("[{}] added a full_href prop", url);
+    }
 
-    selection.name = elements::name(&el);
-    selection.content = elements::content(&el);
-    selection.rel = elements::rel(&el);
-    selection.src = elements::src(&el);
-    selection.type_ = elements::type_(&el);
-    selection.disabled = elements::disabled(&el);
+    if let Some(Value::String(src)) = selection.get("src") {
+        let ext = src.split('.').last();
+        // if we can see a file extension
+        if let Some(ext) = ext {
+            let is_image_format = image_formats.contains(&ext);
 
-    trace!(
-        "[{:?}] selection completed: {:?}, {:?}",
-        url.to_string(),
-        selection.full_href,
-        selection.text,
-    );
+            if (tag == *"img") || (is_image_format) {
+                if let Some(v) = image_formats.into_iter().find(|i| (*i) == ext) {
+                    selection.insert(String::from("imageType"), json!(v));
+                }
+                selection.insert(String::from("sourceType"), json!("image"));
+            }
+        }
+    }
+
+    trace!("selection for node completed");
 
     selection
 }

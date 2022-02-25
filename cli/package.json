@@ -4,7 +4,8 @@
   "version": "0.3.0",
   "description": "The Rust CLI using native-only binary and Rust's Clasp",
   "scripts": {
-    "build": "cargo build",
+    "build": "cargo build --release",
+    "trace": "RUST_LOG=scraped=trace target/release/scraped ",
     "lint": "cargo clippy",
     "publish": "cargo build --release",
     "test": "cargo test"

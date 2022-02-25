@@ -3,22 +3,20 @@ use std::{
     fmt::{self, Display, Formatter},
     vec,
 };
+use tracing::warn;
 use url::Url;
 
 use serde::Serialize;
 use serde_json::{json, Value};
 
-use crate::selection::Selection;
-
 #[derive(Debug, Serialize, Clone)]
 #[serde(untagged)]
 pub enum ResultKind {
     /** a selector with a single DOM element as result */
-    #[serde(serialize_with = "crate::util::serialize_selection")]
-    Item(Box<Selection>),
+    Item(Box<HashMap<String, Value>>),
     /** a selector with a _list_ of DOM elements as a result */
-    #[serde(serialize_with = "crate::util::serialize_selection_list")]
-    List(Vec<Selection>),
+    List(Vec<HashMap<String, Value>>),
+    /** a property which has been synthesized from selection results */
     Property(Value),
 }
 
@@ -26,7 +24,34 @@ impl Display for ResultKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self {
             ResultKind::Property(_) => write!(f, "{}", &self),
-            _ => write!(f, "{}", json!(&self).to_string()),
+            _ => write!(f, "{}", json!(&self)),
+        }
+    }
+}
+
+impl ResultKind {
+    pub fn get(&self, key: &str) -> Value {
+        match self {
+            ResultKind::Item(value) => {
+                if let Some(v) = value.get(key) {
+                    json!((*v))
+                } else {
+                    json!(null)
+                }
+            }
+            ResultKind::List(v) => v //
+                .iter()
+                .map(|i| json!(i.get(key)))
+                .collect(),
+            ResultKind::Property(v) => match v {
+                Value::Object(v) => {
+                    json!(v)
+                }
+                _ => {
+                    warn!("There was an attempt to get the key '{}' from a non-object property! This will result in a null value being returned.", key);
+                    json!(null)
+                }
+            },
         }
     }
 }
