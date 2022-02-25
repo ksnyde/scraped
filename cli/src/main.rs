@@ -34,7 +34,7 @@ struct Args {
     config: Option<PathBuf>,
 }
 
-use scraped::{results::FlatResult, Document, PropertyCallback};
+use scraped::{results::ParsedResults, Document, PropertyCallback};
 mod show;
 use show::show;
 
@@ -66,12 +66,16 @@ async fn main() -> Result<()> {
     let args = Args::parse();
     debug!("CLI arguments parsed {:?}", args);
 
-    let doc = Document::new(&args.url)?
-        .load_document()
-        .await?
-        .for_docs_rs()
-        .add_generic_selectors()
-        .add_property("title", title);
+    let doc = ParsedResults::from(
+        &Document::new(&args.url)?
+            .load_document()
+            .await?
+            .for_docs_rs()
+            .add_generic_selectors()
+            .add_property("title", title),
+    );
+
+    let d = Document::new("https://foo.bar")?.load_document().await?;
 
     println!("- Parsed {} ", &args.url);
 
@@ -82,23 +86,23 @@ async fn main() -> Result<()> {
             let results = serde_json::to_string(&doc.results()?)?;
             fs::write(&v, results).await?;
         }
-        (Some(v), true) => {
+        (Some(_v), true) => {
             println!(
                 "- Loading and parsing {} child nodes{}",
                 &doc.get_child_urls().len(),
                 if args.flatten { " [flatten] " } else { "" }
             );
 
-            let results = match (args.follow, args.flatten) {
-                (true, true) => {
-                    let r = FlatResult::flatten(&doc.results_graph().await?);
-                    serde_json::to_string(&r)?
-                }
-                (true, false) => serde_json::to_string(&doc.results_graph().await?)?,
-                (false, _) => serde_json::to_string(&doc.results_graph().await?)?,
-            };
+            // let results = match (args.follow, args.flatten) {
+            //     (true, true) => {
+            //         let r = FlatResult::flatten(&doc.results_graph().await?);
+            //         serde_json::to_string(&r)?
+            //     }
+            //     (true, false) => serde_json::to_string(&doc.results_graph().await?)?,
+            //     (false, _) => serde_json::to_string(&doc.results_graph().await?)?,
+            // };
 
-            fs::write(&v, results).await?;
+            // fs::write(&v, results).await?;
         }
         _ => (),
     }

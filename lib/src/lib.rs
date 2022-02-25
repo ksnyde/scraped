@@ -4,7 +4,7 @@ use color_eyre::{
     Result,
 };
 
-use results::{ParseResults, ResultKind};
+use results::{ParsedResults, ResultKind};
 use scraper::{Html, Selector};
 use selection::{get_selection, SelectorKind};
 use serde::Serialize;
@@ -305,21 +305,21 @@ impl ParsedDoc {
 
     /// Streams in the child HTML pages and parses them into `ParsedDoc`
     /// structs.
-    pub async fn get_children(&self) -> Result<Vec<ParseResults>> {
+    pub async fn get_children(&self) -> Result<Vec<ParsedResults>> {
         let urls = self.get_child_urls();
         trace!(
             "retrieving {} child URLs for {} over network",
             urls.len(),
             self.url
         );
-        let mut children: Vec<ParseResults> = vec![];
+        let mut children: Vec<ParsedResults> = vec![];
         let mut stream = tokio_stream::iter(urls);
 
         while let Some(v) = stream.next().await {
             let doc = Document::from(&v);
             let child = doc.load_document().await.unwrap().for_docs_rs();
             trace!("getting {}", &child.url);
-            children.push(child.results()?);
+            children.push(child.results());
             trace!("finished loading child: {}", &v);
         }
 
@@ -390,30 +390,8 @@ impl ParsedDoc {
 
     /// Returns all _selectors_ and _properties_ on the current page without recursing
     /// into child pages.
-    pub fn results(&self) -> Result<ParseResults> {
-        trace!("getting results for {}", self.url);
-        let data = self.get_selection_results();
-        let props = self.get_property_results();
-        trace!(
-            "selectors and props have been retrieved for results: {:?}",
-            props
-        );
-
-        Ok(ParseResults {
-            url: self.url.clone(),
-            data,
-            props,
-            children: vec![],
-        })
-    }
-
-    /// Returns a tree of `ParseResults` starting with the given URL and
-    /// then following into the children nodes (one level deep).
-    pub async fn results_graph(&self) -> Result<ParseResults, Report> {
-        let mut current_page = self.results()?;
-        current_page.children = self.get_children().await?;
-
-        Ok(current_page)
+    pub fn results(&self) -> ParsedResults {
+        ParsedResults::from(self)
     }
 }
 

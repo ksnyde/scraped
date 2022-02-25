@@ -1,13 +1,16 @@
+use color_eyre::{eyre::eyre, Result};
+use lazy_static::__Deref;
 use std::{
     collections::HashMap,
     fmt::{self, Display, Formatter},
-    vec,
 };
 use tracing::warn;
 use url::Url;
 
 use serde::Serialize;
 use serde_json::{json, Value};
+
+use crate::ParsedDoc;
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(untagged)]
@@ -60,54 +63,80 @@ impl ResultKind {
 /// selectors on a given page as `data` and then optionally recurses
 /// into child elements and provides the same structure.
 #[derive(Debug, Serialize, Clone)]
-pub struct ParseResults {
+pub struct ParsedResults {
     /// The URL which was parsed.
     #[serde(serialize_with = "crate::util::url_to_string")]
     pub url: Url,
     /// The raw data extracted from the CSS selectors specified.
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
     pub data: HashMap<String, ResultKind>,
     /// Abstracted properties derived from `data` and converted to
     /// abstract JSON representation for serialization.s
     pub props: HashMap<String, Value>,
 
-    pub children: Vec<ParseResults>,
+    /// the URLs which were identified from selectors activated with
+    /// child_selectors() method.
+    #[serde(serialize_with = "crate::util::url_list_to_string")]
+    pub child_urls: Vec<Url>,
+
+    cache: Option<HashMap<String, Value>>,
 }
 
-impl Display for ParseResults {
+impl Display for ParsedResults {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", serde_json::to_string(&self))
     }
 }
 
-/// A singular "result" that is typically fit into a flat vector of results
-#[derive(Clone, Serialize)]
-pub struct FlatResult {
-    /// The URL which was parsed.
-    #[serde(serialize_with = "crate::util::url_to_string")]
-    pub url: Url,
-    /// The raw data extracted from the CSS selectors specified.
-    pub data: HashMap<String, ResultKind>,
-    /// Abstracted properties derived from `data` and converted to
-    /// abstract JSON representation for serialization.s
-    pub props: HashMap<String, Value>,
+impl From<&ParsedDoc> for ParsedResults {
+    fn from(doc: &ParsedDoc) -> ParsedResults {
+        ParsedResults {
+            url: doc.url.clone(),
+            data: doc.get_selection_results(),
+            props: doc.get_property_results(),
+            child_urls: doc.get_child_urls(),
+            cache: None,
+        }
+    }
 }
 
-impl FlatResult {
-    /// flattens a `ParseResults` struct from it's heirarchical structure to a
-    /// vector of `FlatResult` results.
-    pub fn flatten(r: &ParseResults) -> Vec<FlatResult> {
-        let mut flat = vec![FlatResult {
-            url: r.url.clone(),
-            data: r.data.clone(),
-            props: r.props.clone(),
-        }];
+fn merge_from_ref(map: &mut HashMap<(), ()>, map_ref: &HashMap<(), ()>) {
+    map.extend(map_ref.into_iter().map(|(k, v)| (k.clone(), v.clone())));
+}
 
-        r.children.iter().for_each(|c| {
-            FlatResult::flatten(c)
-                .iter()
-                .for_each(|i| flat.push(i.clone()));
-        });
+impl ParsedResults {
+    /// provides a convience method that allows selection of from
+    /// a HashMap which is the merge of all selectors (Item and List)
+    /// with properties where properties will be given preference and
+    /// will mask a similarly named selector
+    ///
+    /// Note: if a key is passed in that is NOT defined then an error
+    /// will be raised, however if a valid key is used that relates to
+    /// an empty/non-existant selector than you will get a `Value::Null`
+    /// variant of `Value`.
+    pub fn get(&self, key: &str) -> Result<Value> {
+        let props = self.props.clone().extend(self.data);
 
-        flat
+        let value: Option<&Value> = match props {
+            Some(cache) => cache.get(key),
+            _ => {
+                // build cache
+                let mut cache = HashMap::new();
+                for (k, v) in self.data.iter() {
+                    cache.insert(k, v);
+                }
+
+                &cache.get(key)
+            }
+        };
+
+        if let Some(_v) = value {
+            Ok(value.unwrap().deref().clone())
+        } else {
+            Err(eyre!(
+                "Couldn't find the property or selector called '{}'",
+                key
+            ))
+        }
     }
 }
