@@ -237,9 +237,7 @@ impl ParsedDoc {
     /// the property will be given precedence; effectively masking the selector value
     pub fn get(&self, name: &str) -> Result<Option<ResultKind>> {
         let selections = self.get_selection_results();
-        let properties = self
-            .get_property_results()
-            .expect("properties generated off of selection values");
+        let properties = self.get_property_results();
 
         if let Some(v) = properties.get(name) {
             Ok(Some(ResultKind::Property(v.clone())))
@@ -247,10 +245,7 @@ impl ParsedDoc {
             match selections.get(name) {
                 Some(v) => Ok(Some(v.clone())),
                 // None => v,
-                _ => Err(eyre!(format!(
-                    "could not find the '{}' selector",
-                    name.to_string()
-                ))),
+                _ => Err(eyre!(format!("could not find the '{}' selector", name))),
             }
         }
     }
@@ -368,7 +363,7 @@ impl ParsedDoc {
 
     /// provides the _selector results to all property callbacks and returns a hashmap of
     /// _property values_.
-    fn get_property_results(&self) -> Result<HashMap<String, Value>> {
+    fn get_property_results(&self) -> HashMap<String, Value> {
         trace!("getting property results");
         let selections = self.get_selection_results();
         trace!("all document selections evaluated");
@@ -390,7 +385,7 @@ impl ParsedDoc {
         });
         trace!("all properties have been captured in hashmap");
 
-        Ok(results)
+        results
     }
 
     /// Returns all _selectors_ and _properties_ on the current page without recursing
@@ -398,7 +393,7 @@ impl ParsedDoc {
     pub fn results(&self) -> Result<ParseResults> {
         trace!("getting results for {}", self.url);
         let data = self.get_selection_results();
-        let props = self.get_property_results()?;
+        let props = self.get_property_results();
         trace!(
             "selectors and props have been retrieved for results: {:?}",
             props

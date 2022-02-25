@@ -13,10 +13,8 @@ use serde_json::{json, Value};
 #[serde(untagged)]
 pub enum ResultKind {
     /** a selector with a single DOM element as result */
-    #[serde(serialize_with = "crate::util::serialize_selection")]
     Item(Box<HashMap<String, Value>>),
     /** a selector with a _list_ of DOM elements as a result */
-    #[serde(serialize_with = "crate::util::serialize_selection_list")]
     List(Vec<HashMap<String, Value>>),
     /** a property which has been synthesized from selection results */
     Property(Value),
@@ -26,7 +24,7 @@ impl Display for ResultKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match &self {
             ResultKind::Property(_) => write!(f, "{}", &self),
-            _ => write!(f, "{}", json!(&self).to_string()),
+            _ => write!(f, "{}", json!(&self)),
         }
     }
 }
@@ -36,13 +34,13 @@ impl ResultKind {
         match self {
             ResultKind::Item(value) => {
                 if let Some(v) = value.get(key) {
-                    json!((*v).clone())
+                    json!((*v))
                 } else {
                     json!(null)
                 }
             }
             ResultKind::List(v) => v //
-                .into_iter()
+                .iter()
                 .map(|i| json!(i.get(key)))
                 .collect(),
             ResultKind::Property(v) => match v {

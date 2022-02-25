@@ -26,7 +26,7 @@ pub fn get_selection(el: ElementRef, url: &Url) -> HashMap<String, Value> {
 
     // text and html
     let text = el.text().collect::<String>();
-    if text.len() > 0 {
+    if text.is_empty() {
         selection.insert(String::from("text"), json!(text.trim().to_string()));
     }
     if !el.inner_html().is_empty() {
@@ -52,7 +52,7 @@ pub fn get_selection(el: ElementRef, url: &Url) -> HashMap<String, Value> {
         } else {
             let href = href.to_string();
             let url = url.join(&href).expect("full url should be parsable");
-            if href.len() == 0 {
+            if href.is_empty() {
                 selection.insert(String::from("hrefType"), json!("empty"));
             } else {
                 selection.insert(String::from("hrefType"), json!("relative"));
@@ -63,14 +63,14 @@ pub fn get_selection(el: ElementRef, url: &Url) -> HashMap<String, Value> {
     }
 
     if let Some(Value::String(src)) = selection.get("src") {
-        let ext = src.split(".").last();
+        let ext = src.split('.').last();
         // if we can see a file extension
         if let Some(ext) = ext {
             let is_image_format = image_formats.contains(&ext);
 
-            if (tag == "img".to_string()) || (is_image_format) {
+            if (tag == *"img") || (is_image_format) {
                 if let Some(v) = image_formats.into_iter().find(|i| (*i) == ext) {
-                    selection.insert(String::from("imageType"), json!(v.to_string()));
+                    selection.insert(String::from("imageType"), json!(v));
                 }
                 selection.insert(String::from("sourceType"), json!("image"));
             }

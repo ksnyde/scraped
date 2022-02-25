@@ -1,12 +1,11 @@
-use color_eyre::eyre::Result;
 use scraped::ParsedDoc;
 use serde_json::json;
 use tracing::{info, trace, warn};
 
 /// outputs a set of properties which reside on a `ParsedDoc`.
-pub fn show(doc: &ParsedDoc, show: &Option<String>) -> Result<()> {
+pub fn show(doc: &ParsedDoc, show: &Option<String>) {
     let props = match show {
-        Some(v) => v.split(",").into_iter().collect(),
+        Some(v) => v.split(',').into_iter().collect(),
         None => vec![],
     };
     trace!("showing properties: {:?}", props);
@@ -26,6 +25,4 @@ pub fn show(doc: &ParsedDoc, show: &Option<String>) -> Result<()> {
             println!("- {}: not found!", p);
         }
     });
-
-    Ok(())
 }

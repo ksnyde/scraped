@@ -55,7 +55,7 @@ async fn main() -> Result<()> {
             .expect("The title selector should exist")
             .get("text");
 
-        let choices: Vec<&Value> = vec![&h1, &title]
+        let choices: Vec<&Value> = [&h1, &title]
             .into_iter()
             .filter(|i| !Value::is_null(*i))
             .collect();
@@ -75,7 +75,7 @@ async fn main() -> Result<()> {
 
     println!("- Parsed {} ", &args.url);
 
-    show(&doc, &args.show)?;
+    show(&doc, &args.show);
 
     match (&args.output, args.follow) {
         (Some(v), false) => {
