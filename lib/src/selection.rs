@@ -26,7 +26,7 @@ pub fn get_selection(el: ElementRef, url: &Url) -> HashMap<String, Value> {
 
     // text and html
     let text = el.text().collect::<String>();
-    if text.is_empty() {
+    if !text.is_empty() {
         selection.insert(String::from("text"), json!(text.trim().to_string()));
     }
     if !el.inner_html().is_empty() {
@@ -37,8 +37,8 @@ pub fn get_selection(el: ElementRef, url: &Url) -> HashMap<String, Value> {
     }
 
     // synthesize other props conditionally
-
     let image_formats = ["gif", "jpg", "jpeg", "avif", "webp", "ico", "tiff"];
+    // TODO: finish off other formats and their meta info
     // let doc_formats = ["doc", "docx", "pdf"];
     // let data_formats = ["csv", "json", "txt", "xls"];
     // let code_formats = ["js", "wasm"];

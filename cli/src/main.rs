@@ -34,7 +34,10 @@ struct Args {
     config: Option<PathBuf>,
 }
 
-use scraped::{results::ParsedResults, Document, PropertyCallback};
+use scraped::{
+    document::{Document, PropertyCallback},
+    results::ScrapedResults,
+};
 mod show;
 use show::show;
 
@@ -66,7 +69,7 @@ async fn main() -> Result<()> {
     let args = Args::parse();
     debug!("CLI arguments parsed {:?}", args);
 
-    let doc = ParsedResults::from(
+    let doc = ScrapedResults::from(
         &Document::new(&args.url)?
             .load_document()
             .await?
