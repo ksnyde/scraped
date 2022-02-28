@@ -5,6 +5,15 @@ use std::collections::HashMap;
 use crate::document::Document;
 
 pub struct ConcurrentScrape {
-    docs: Vec<Document>,
-    config: HashMap<String, String>,
+    pub docs: Vec<Document>,
+    pub config: HashMap<String, String>,
+}
+
+impl ConcurrentScrape {
+    pub fn new() -> Self {
+        ConcurrentScrape {
+            docs: vec![],
+            config: HashMap::new(),
+        }
+    }
 }

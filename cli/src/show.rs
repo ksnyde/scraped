@@ -1,18 +1,22 @@
-use color_eyre::eyre::Result;
 use scraped::results::ScrapedResults;
-use serde_json::json;
-use tracing::{info, trace, warn};
+use tracing::{debug, instrument, warn};
 
 /// outputs a set of properties which reside on a `ParsedDoc`.
+#[instrument]
 pub fn show(doc: &ScrapedResults, show: &Option<String>) {
     let props = match show {
         Some(v) => v.split(',').into_iter().collect(),
         None => vec![],
     };
-    trace!("showing properties: {:?}", props);
+    debug!("properties configured to show are: {:?}", props);
 
     props.into_iter().for_each(|k| {
-        let v = doc.get(k);
-        println!("- {}: {}", k, v);
+        let result = doc.get(k);
+
+        if let Ok(v) = result {
+            println!("- {}: {}", k, v);
+        } else {
+            //
+        }
     });
 }

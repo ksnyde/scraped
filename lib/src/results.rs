@@ -7,7 +7,7 @@ use std::{
     collections::HashMap,
     fmt::{self, Debug, Display, Formatter},
 };
-use tracing::{error, trace};
+use tracing::trace;
 use url::Url;
 
 use crate::{
@@ -41,7 +41,7 @@ impl Display for ScrapedResults {
     }
 }
 
-impl From<&LoadedDocument> for ScrapedResults {
+impl From<&LoadedDocument<'_>> for ScrapedResults {
     /// converts a `LoadedDocument` and it's configuration into a fully
     /// parsed `ScrapedResults` struct
     fn from(doc: &LoadedDocument) -> ScrapedResults {
@@ -55,17 +55,17 @@ impl From<&LoadedDocument> for ScrapedResults {
         doc.item_selectors.iter().for_each(|(k, sel)| {
             let el = doc.body.select(sel).next();
             if let Some(el) = el {
-                let value = get_selection(el, &doc.url);
+                let value = get_selection(el, doc.url);
                 selections.insert(k.to_string(), json!(value));
             } else {
-                // TODO
+                selections.insert(k.to_string(), json!(null));
             }
         });
         doc.list_selectors.iter().for_each(|(k, sel)| {
             let value: Vec<HashMap<String, Value>> = doc //
                 .body
                 .select(sel)
-                .map(|el| get_selection(el, &doc.url))
+                .map(|el| get_selection(el, doc.url))
                 .collect();
             selections.insert(k.to_string(), json!(value));
         });
@@ -85,17 +85,13 @@ impl From<&LoadedDocument> for ScrapedResults {
             headers: doc.headers.clone(),
             body: doc.body.clone(),
             properties,
-            selections: if doc.keep_selectors {
+            selections: if *doc.keep_selectors {
                 selections
             } else {
                 HashMap::new()
             },
         }
     }
-}
-
-fn merge_from_ref(map: &mut HashMap<(), ()>, map_ref: &HashMap<(), ()>) {
-    map.extend(map_ref.into_iter().map(|(k, v)| (k.clone(), v.clone())));
 }
 
 impl ScrapedResults {
@@ -105,28 +101,19 @@ impl ScrapedResults {
     /// 1. it is included in a call to `child_selectors(["foo", "bar"], scope)`
     /// 2. has a `href` property defined
     /// 3. the "scope" of the href first that defined in call to `child_selectors`
-    fn get_child_urls(&self) -> Vec<Url> {
+    pub fn get_child_urls(&self) -> Vec<Url> {
         let mut children: Vec<Url> = Vec::new();
         trace!("[{}]: getting the child URLs from page", self.url);
 
-        for (name, selector) in &self.selections {
+        for selector in self.selections.values() {
             match selector {
                 // a list of selections
                 Value::Array(list) => {
-                    list.into_iter().for_each(|i| {
+                    list.iter().for_each(|i| {
                         if let Value::Object(record) = i {
                             if let Some(Value::String(href)) = record.get("full_href") {
                                 let url = parse_url(href);
-                                if url.is_ok() {
-                                    children.push(url.unwrap());
-                                } else {
-                                    error!(
-                                        "failed to convert a child url string to a proper URL in the '{}' selector on the '{}' page to a properly structured URL: {}",
-                                        name,
-                                        self.url,
-                                        href
-                                    );
-                                }
+                                children.push(url.unwrap());
                             }
                         }
                     });
@@ -134,16 +121,8 @@ impl ScrapedResults {
                 // a singular/item selection
                 Value::Object(obj) => {
                     if let Some(Value::String(href)) = obj.get("full_href") {
-                        let url = parse_url(href);
-                        if url.is_ok() {
-                            children.push(url.unwrap());
-                        } else {
-                            error!("failed to convert a child url string to a proper URL in the '{}' selector on the '{}' page to a properly structured URL: {}",
-                                name,
-                                self.url,
-                                href
-                            );
-                        }
+                        let url = parse_url(href).unwrap();
+                        children.push(url);
                     }
                 }
                 _ => {}
@@ -166,15 +145,13 @@ impl ScrapedResults {
     pub fn get(&self, key: &str) -> Result<Value> {
         if let Some(value) = self.properties.get(key) {
             Ok(json!(value))
+        } else if let Some(value) = self.selections.get(key) {
+            Ok(json!(value))
         } else {
-            if let Some(value) = self.selections.get(key) {
-                Ok(json!(value))
-            } else {
-                Err(eyre!(format!(
-                    "Request for the '{}' key in scraped results failed. This key does not exist!",
-                    key
-                )))
-            }
+            Err(eyre!(format!(
+                "Request for the '{}' key in scraped results failed. This key does not exist!",
+                key
+            )))
         }
     }
 }

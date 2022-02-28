@@ -35,8 +35,8 @@ struct Args {
 }
 
 use scraped::{
+    concurrent::ConcurrentScrape,
     document::{Document, PropertyCallback},
-    results::ScrapedResults,
 };
 mod show;
 use show::show;
@@ -58,9 +58,10 @@ async fn main() -> Result<()> {
             .expect("The title selector should exist")
             .get("text");
 
-        let choices: Vec<&Value> = [&h1, &title]
+        let choices: Vec<Value> = [h1, title]
             .into_iter()
-            .filter(|i| !Value::is_null(*i))
+            .filter(|i| (*i).is_some())
+            .map(|i| json!(i))
             .collect();
 
         json!(choices.first())
@@ -69,32 +70,34 @@ async fn main() -> Result<()> {
     let args = Args::parse();
     debug!("CLI arguments parsed {:?}", args);
 
-    let doc = ScrapedResults::from(
-        &Document::new(&args.url)?
-            .load_document()
-            .await?
-            .for_docs_rs()
-            .add_generic_selectors()
-            .add_property("title", title),
-    );
+    let mut doc = Document::new(&args.url)?;
+    doc //
+        .add_generic_selectors()?
+        .for_docs_rs()?
+        .add_property("title", title);
+    let results = doc.scrape().await?;
 
-    let d = Document::new("https://foo.bar")?.load_document().await?;
+    println!("- Scraped {} ", &args.url);
+    // log to console
+    show(&results, &args.show);
 
-    println!("- Parsed {} ", &args.url);
-
-    show(&doc, &args.show);
+    // process children
+    let _children = ConcurrentScrape::new();
+    if args.follow {
+        // TODO
+    }
 
     match (&args.output, args.follow) {
         (Some(v), false) => {
-            let results = serde_json::to_string(&doc.results()?)?;
+            let results = serde_json::to_string(&results)?;
             fs::write(&v, results).await?;
         }
         (Some(_v), true) => {
-            println!(
-                "- Loading and parsing {} child nodes{}",
-                &doc.get_child_urls().len(),
-                if args.flatten { " [flatten] " } else { "" }
-            );
+            // println!(
+            //     "- Loading and parsing {} child nodes{}",
+            //     &doc.get_child_urls().len(),
+            //     if args.flatten { " [flatten] " } else { "" }
+            // );
 
             // let results = match (args.follow, args.flatten) {
             //     (true, true) => {

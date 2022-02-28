@@ -1,67 +1,81 @@
-use std::fs;
-
 use claim::{assert_err, assert_ok, assert_some};
-use scraped::{Document, LoadedDocument};
-use serde_json::json;
+use color_eyre::{eyre::eyre, Result};
+use reqwest::header::HeaderMap;
+use scraped::{
+    document::{Document, LoadedDocument},
+    results::ScrapedResults,
+};
+use serde_json::{json, Value};
+use std::fs;
 use url::Url;
+
+fn load_simple_doc<'a>(doc: &'a Document) -> LoadedDocument<'a> {
+    let headers = HeaderMap::new();
+    let body =
+        fs::read_to_string("tests/fixtures/simple-doc.html").expect("Problem reading fixture file");
+    doc.provide_response(headers, &body)
+}
 
 #[test]
 fn valid_string_url_is_accepted() {
     let url = String::from("https://dev.null");
 
     assert_ok!(Document::new(&url));
-    assert_ok!(LoadedDocument::new(&url, &"".to_string()));
 }
 
 #[test]
 fn invalid_string_url_is_rejected() {
     let url = String::from("\\x!//");
     assert_err!(Document::new(&url));
-    assert_err!(LoadedDocument::new(&url, &"".to_string()));
 }
 
 #[test]
 fn document_from_url() {
-    let url = Url::parse("https://google.com").unwrap();
-    assert_eq!(Document::from(&url), Document { url, data: None });
+    let str = "https://google.com";
+    let url = Url::parse(str).unwrap();
+    let from_url = Document::from(&url);
+    let from_str = Document::new(str).unwrap();
+    assert_eq!(from_url.url, from_str.url);
 }
 
 #[test]
-fn single_selector_matches() {
-    let url = String::from("https://dev.null");
-    let contents =
-        fs::read_to_string("tests/fixtures/simple-doc.html").expect("Problem reading fixture file");
-    let doc = LoadedDocument::new(&url, &contents)
-        .expect("LoadedDoc prepped")
-        .parse_document()
-        .expect("LoadedDoc parsed")
-        .add_selector("h1", "h1");
-    let result = doc.get("h1");
-    assert_ok!(&result);
-    let result = result.unwrap();
-    assert_some!(&result);
-    let _result = result.expect("result has a value");
-    // assert_eq!(result, "My Title")
+fn single_selector_matches() -> Result<()> {
+    let mut doc = Document::new("https://dev.null").unwrap();
+    doc.add_selector("h1", "h1").unwrap();
+
+    let result = ScrapedResults::from(&load_simple_doc(&doc));
+    let h1 = result.get("h1")?;
+
+    if let Value::Object(h1) = h1 {
+        let text = h1.get("text");
+        if text.is_none() {
+            Err(eyre!("h1's text property was none"))
+        } else {
+            if let Value::String(text) = text.unwrap() {
+                if text.eq("My Title") {
+                    Ok(())
+                } else {
+                    Err(eyre!(format!(
+                        "the h1 text value was supposed to be 'My Title' not {}",
+                        text
+                    )))
+                }
+            } else {
+                Err(eyre!("h1's text property wasn't a string type"))
+            }
+        }
+    } else {
+        Err(eyre!("foobar"))
+    }
 }
 
 #[test]
-fn static_property_definition_available_in_results() {
-    let url = String::from("https://dev.null");
-    let contents =
-        fs::read_to_string("tests/fixtures/simple-doc.html").expect("Problem reading fixture file");
-    let results = LoadedDocument::new(&url, &contents)
-        .expect("LoadedDoc created")
-        .parse_document()
-        .expect("ParsedDoc created")
-        .add_property("hello", |_| json!("world"))
-        .results()
-        .expect("results successfully extracted");
+fn property_definition_available_in_results() {
+    let mut doc = Document::new("https://dev.null").unwrap();
+    doc.add_property("hello", |_| json!("world"));
+    let results = ScrapedResults::from(&load_simple_doc(&doc));
 
-    assert_some!(results.props.get("hello"));
-    let hello = results.props.get("hello").expect("hello prop exists");
-    assert_eq!(hello, &json!("world"));
+    assert!(results.get("hello").is_ok());
+    let hello = results.get("hello").unwrap();
+    assert_eq!(&hello, &json!("world"));
 }
-
-// fn single_selector_without_match() {
-//     //
-// }
