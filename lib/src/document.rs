@@ -14,7 +14,10 @@ use serde_json::Value;
 use std::{collections::HashMap, fmt::Debug, fmt::Display};
 use url::Url;
 
-use crate::{results::ScrapedResults, util::BearerTokens};
+use crate::{
+    results::{ScrapedResults, SelectionResult},
+    util::BearerTokens,
+};
 
 /// receives an unvalidated String and returns a validated Url
 pub fn parse_url(url: &str) -> Result<Url, Report> {
@@ -25,7 +28,7 @@ pub fn parse_url(url: &str) -> Result<Url, Report> {
 
 /// a callback function which is provided a hashmap of all resultant _selectors_
 /// and is expected to turn that into a meaningup JSON-based result.
-pub type PropertyCallback = fn(sel: &HashMap<String, Value>) -> Value;
+pub type PropertyCallback = fn(sel: &HashMap<String, SelectionResult>) -> Value;
 
 pub struct DebuggableCallback {
     text: &'static str,
@@ -198,7 +201,7 @@ impl Document {
 
         // validate selectors
         selectors.iter().for_each(|i| {
-            if self.item_selectors.get(*i).is_none() {
+            if (self.item_selectors.get(*i).is_none()) && (self.list_selectors.get(*i).is_none()) {
                 invalid.push(i)
             }
         });
@@ -210,7 +213,7 @@ impl Document {
             Ok(self)
         } else {
             Err(
-                eyre!(format!("When setting child selectors, references to invalid selectors where made! {:?} are invalid/unknown selectors.", invalid))
+                eyre!(format!("When setting child selectors, references to invalid selectors where made! {:#?} are invalid/unknown selectors. Valid selectors were: {:#?} and {:#?}", invalid, self.item_selectors, self.list_selectors))
             )
         }
     }

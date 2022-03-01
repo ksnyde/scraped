@@ -1,7 +1,7 @@
 use color_eyre::{eyre::eyre, Result};
-use reqwest::header::HeaderMap;
+use reqwest::header::{HeaderMap, HeaderValue};
 use scraper::Html;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
@@ -11,28 +11,53 @@ use tracing::trace;
 use url::Url;
 
 use crate::{
-    document::{parse_url, LoadedDocument, PropertyCallback},
+    document::{LoadedDocument, PropertyCallback},
+    element::Element,
     selection::get_selection,
 };
+
+fn headers_to_hashmap(headers: &HeaderMap<HeaderValue>) -> HashMap<String, Vec<String>> {
+    let mut header_hashmap = HashMap::new();
+    for (k, v) in headers {
+        let k = k.as_str().to_owned();
+        let v = String::from_utf8_lossy(v.as_bytes()).into_owned();
+        header_hashmap.entry(k).or_insert_with(Vec::new).push(v)
+    }
+    header_hashmap
+}
+
+/// A `SelectorNode` is the expected structure of a
+/// _configured selector_. The two variants of this enum
+/// map directly to whether the selector was chosen as
+/// "list" selector or not.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SelectionResult {
+    None(),
+    /// A item selector results in this type of node
+    Element(Element),
+    /// A list selector results in this type of node
+    List(Vec<Element>),
+}
 
 /// A recursive structure which provides the `url` and all top level
 /// selectors on a given page as `data` and then optionally recurses
 /// into child elements and provides the same structure.
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize)]
 pub struct ScrapedResults {
     /// The URL which was parsed.
     #[serde(serialize_with = "crate::util::url_to_string")]
     pub url: Url,
     /// The headers received in the page's response
-    #[serde(serialize_with = "crate::util::headers_to_string")]
-    pub headers: HeaderMap,
+    pub headers: HashMap<String, Vec<String>>,
+    pub child_urls: Option<Vec<String>>,
     /// The DOM nodes from the body of the page
-    #[serde(serialize_with = "crate::util::html_to_string")]
+    #[serde(skip)]
     pub body: Html,
     /// the property values which were configured by passed in callbacks
     pub properties: HashMap<String, Value>,
     /// the selector results after applying the page's DOM tree
-    pub selections: HashMap<String, Value>,
+    pub selections: HashMap<String, SelectionResult>,
 }
 
 impl Display for ScrapedResults {
@@ -49,25 +74,29 @@ impl From<&LoadedDocument<'_>> for ScrapedResults {
             "[{}]: converting LoadedDocument to ScrapedResults",
             &doc.url
         );
-        let mut selections: HashMap<String, Value> = HashMap::new();
+        let mut selections: HashMap<String, SelectionResult> = HashMap::new();
         let mut properties: HashMap<String, Value> = HashMap::new();
 
         doc.item_selectors.iter().for_each(|(k, sel)| {
             let el = doc.body.select(sel).next();
             if let Some(el) = el {
                 let value = get_selection(el, doc.url);
-                selections.insert(k.to_string(), json!(value));
+                selections.insert(k.to_string(), SelectionResult::Element(value));
             } else {
-                selections.insert(k.to_string(), json!(null));
+                selections.insert(k.to_string(), SelectionResult::None());
             }
         });
         doc.list_selectors.iter().for_each(|(k, sel)| {
-            let value: Vec<HashMap<String, Value>> = doc //
+            let value: Vec<Element> = doc //
                 .body
                 .select(sel)
                 .map(|el| get_selection(el, doc.url))
                 .collect();
-            selections.insert(k.to_string(), json!(value));
+            if value.is_empty() {
+                selections.insert(k.to_string(), SelectionResult::None());
+            } else {
+                selections.insert(k.to_string(), SelectionResult::List(value));
+            }
         });
         trace!(
             "[{}]: {} selectors have been converted to values",
@@ -80,63 +109,31 @@ impl From<&LoadedDocument<'_>> for ScrapedResults {
             properties.insert(k.to_string(), cb(&selections));
         });
 
-        ScrapedResults {
+        let mut result = ScrapedResults {
             url: doc.url.clone(),
-            headers: doc.headers.clone(),
+            headers: headers_to_hashmap(&doc.headers),
             body: doc.body.clone(),
             properties,
+            child_urls: None,
             selections: if *doc.keep_selectors {
                 selections
             } else {
                 HashMap::new()
             },
+        };
+
+        // get the child URLs if there are selectors to use
+        if !doc.child_selectors.is_empty() {
+            let selectors = doc.child_selectors;
+            let urls = result.get_child_urls(selectors);
+            result.child_urls = Some(urls);
         }
+
+        result
     }
 }
 
 impl ScrapedResults {
-    /// Returns a list of URL's which represent "child URLs". A child
-    /// URL is determined by those _selectors_ which were deemed eligible
-    /// when:
-    /// 1. it is included in a call to `child_selectors(["foo", "bar"], scope)`
-    /// 2. has a `href` property defined
-    /// 3. the "scope" of the href first that defined in call to `child_selectors`
-    pub fn get_child_urls(&self) -> Vec<Url> {
-        let mut children: Vec<Url> = Vec::new();
-        trace!("[{}]: getting the child URLs from page", self.url);
-
-        for selector in self.selections.values() {
-            match selector {
-                // a list of selections
-                Value::Array(list) => {
-                    list.iter().for_each(|i| {
-                        if let Value::Object(record) = i {
-                            if let Some(Value::String(href)) = record.get("full_href") {
-                                let url = parse_url(href);
-                                children.push(url.unwrap());
-                            }
-                        }
-                    });
-                }
-                // a singular/item selection
-                Value::Object(obj) => {
-                    if let Some(Value::String(href)) = obj.get("full_href") {
-                        let url = parse_url(href).unwrap();
-                        children.push(url);
-                    }
-                }
-                _ => {}
-            }
-        }
-        trace!(
-            "got all child pages [{}] for \"{}\"",
-            children.len(),
-            self.url
-        );
-
-        children
-    }
-
     /// Provides a convience accessor that allows selection of a particular
     /// _selection_ value or a _property_. If property and selection properties
     /// overlap then the property will mask the selection by the same name.
@@ -153,5 +150,45 @@ impl ScrapedResults {
                 key
             )))
         }
+    }
+
+    /// Returns a list of URL's which represent "child URLs". A child
+    /// URL is determined by those _selectors_ which were deemed eligible
+    /// when:
+    /// 1. it is included in a call to `child_selectors(["foo", "bar"], scope)`
+    /// 2. has a `href` property defined
+    /// 3. the "scope" of the href first that defined in call to `child_selectors`
+    fn get_child_urls(&self, selectors: &[String]) -> Vec<String> {
+        let mut children: Vec<String> = Vec::new();
+        trace!("[{}]: getting the child URLs from page", self.url);
+
+        for (name, result) in &self.selections {
+            if selectors.contains(name) {
+                match result {
+                    // a list of selections
+                    SelectionResult::List(list) => {
+                        list.iter().for_each(|i| {
+                            if let Some(href) = &i.href {
+                                children.push(href.to_string());
+                            }
+                        });
+                    }
+                    // a singular/item selection
+                    SelectionResult::Element(obj) => {
+                        if let Some(href) = &obj.href {
+                            children.push(href.to_string());
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        trace!(
+            "got all child pages [{}] for \"{}\"",
+            children.len(),
+            self.url
+        );
+
+        children
     }
 }

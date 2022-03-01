@@ -1,8 +1,6 @@
-use std::collections::HashMap;
-
-use reqwest::header::{HeaderMap, HeaderValue};
-use scraper::Html;
+use reqwest::header::HeaderValue;
 use serde::Serialize;
+use std::collections::HashMap;
 use url::Url;
 
 #[derive(Debug)]
@@ -41,18 +39,4 @@ where
     S: serde::Serializer,
 {
     url.to_string().serialize(serializer)
-}
-
-pub fn html_to_string<S>(html: &Html, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    html.root_element().html().serialize(serializer)
-}
-
-pub fn headers_to_string<S>(headers: &HeaderMap, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    format!("{:?}", headers).serialize(serializer)
 }

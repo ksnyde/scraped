@@ -1,6 +1,6 @@
 use clap::Parser;
 use color_eyre::Result;
-use serde_json::{json, Value};
+use serde_json::json;
 use std::path::PathBuf;
 use tokio::fs;
 use tracing::{debug, info};
@@ -37,6 +37,7 @@ struct Args {
 use scraped::{
     concurrent::ConcurrentScrape,
     document::{Document, PropertyCallback},
+    results::SelectionResult,
 };
 mod show;
 use show::show;
@@ -49,22 +50,21 @@ async fn main() -> Result<()> {
     color_eyre::install()?;
 
     let title: PropertyCallback = |r| {
-        let title = r
-            .get("title")
-            .expect("The title selector should exist")
-            .get("text");
-        let h1 = r //
-            .get("h1")
-            .expect("The title selector should exist")
-            .get("text");
+        if let Some(SelectionResult::Element(title)) = r.get("title") {
+            if let Some(SelectionResult::Element(h1)) = r.get("h1") {
+                let choices: Vec<String> = [h1.text.clone(), title.text.clone()] //
+                    .into_iter()
+                    .filter_map(|i| match i.is_some() {
+                        true => Some(i.unwrap()),
+                        false => None,
+                    })
+                    .collect();
 
-        let choices: Vec<Value> = [h1, title]
-            .into_iter()
-            .filter(|i| (*i).is_some())
-            .map(|i| json!(i))
-            .collect();
+                return json!(choices.first());
+            };
+        };
 
-        json!(choices.first())
+        json!(null)
     };
 
     let args = Args::parse();
