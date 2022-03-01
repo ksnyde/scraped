@@ -4,14 +4,14 @@ use std::collections::HashMap;
 use tracing::trace;
 use url::Url;
 
-use crate::element::{Element, HrefSource, HrefType, ImageType, SourceType};
+use crate::element::{Element, HrefSource, HrefType, ImageType, TargetType};
 
-fn foreign_or_local(url: &Url, el: &Element) -> SourceType {
+fn foreign_or_local(url: &Url, el: &Element) -> TargetType {
     let domain = url.domain();
     match (domain, &el.full_href) {
-        (Some(domain), Some(href)) if href.contains(domain) => SourceType::HtmlSameSite,
-        (Some(_domain), Some(_href)) => SourceType::HtmlForeignSite,
-        _ => SourceType::Unknown,
+        (Some(domain), Some(href)) if href.contains(domain) => TargetType::HtmlSameSite,
+        (Some(_domain), Some(_href)) => TargetType::HtmlForeignSite,
+        _ => TargetType::Unknown,
     }
 }
 
@@ -96,37 +96,37 @@ pub fn get_selection(el_ref: ElementRef, url: &Url) -> Element {
 
         if let Some(ext) = ext {
             let source_type = match ext {
-                "woff" => SourceType::Font,
-                "woff2" => SourceType::Font,
-                "ttf" => SourceType::Font,
-                "otf" => SourceType::Font,
-                "fnt" => SourceType::Font,
-                "css" => SourceType::Style,
-                "svg" => SourceType::Image,
-                "jpg" => SourceType::Image,
-                "jpeg" => SourceType::Image,
-                "png" => SourceType::Image,
-                "ico" => SourceType::Image,
+                "woff" => TargetType::Font,
+                "woff2" => TargetType::Font,
+                "ttf" => TargetType::Font,
+                "otf" => TargetType::Font,
+                "fnt" => TargetType::Font,
+                "css" => TargetType::Style,
+                "svg" => TargetType::Image,
+                "jpg" => TargetType::Image,
+                "jpeg" => TargetType::Image,
+                "png" => TargetType::Image,
+                "ico" => TargetType::Image,
                 "html" => match el.href_type {
-                    Some(HrefType::Relative) => SourceType::HtmlSameSite,
-                    Some(HrefType::AnchorLink) => SourceType::HtmlSameSite,
-                    Some(HrefType::SelfReferencingAnchor) => SourceType::HtmlSameSite,
-                    Some(HrefType::Javascript) => SourceType::Unknown,
-                    Some(HrefType::Empty) => SourceType::Unknown,
+                    Some(HrefType::Relative) => TargetType::HtmlSameSite,
+                    Some(HrefType::AnchorLink) => TargetType::HtmlSameSite,
+                    Some(HrefType::SelfReferencingAnchor) => TargetType::HtmlSameSite,
+                    Some(HrefType::Javascript) => TargetType::Unknown,
+                    Some(HrefType::Empty) => TargetType::Unknown,
                     Some(HrefType::Absolute) => {
                         let domain = url.domain();
                         match (domain, &el.full_href) {
                             (Some(_domain), Some(_href)) => foreign_or_local(&url, &el),
-                            _ => SourceType::Unknown,
+                            _ => TargetType::Unknown,
                         }
                     }
-                    _ => SourceType::Unknown,
+                    _ => TargetType::Unknown,
                 },
                 _ => {
                     if &el.tag_name == "a" {
                         foreign_or_local(&url, &el)
                     } else {
-                        SourceType::Unknown
+                        TargetType::Unknown
                     }
                 }
             };
@@ -151,7 +151,7 @@ pub fn get_selection(el_ref: ElementRef, url: &Url) -> Element {
         // if we can see a file extension
         if let Some(ext) = ext {
             if el.tag_name == "img" {
-                el.target_type = Some(SourceType::Image);
+                el.target_type = Some(TargetType::Image);
             }
             let image_type = match ext {
                 "gif" => Some(ImageType::Gif),
@@ -172,6 +172,33 @@ pub fn get_selection(el_ref: ElementRef, url: &Url) -> Element {
                 }
             };
             el.image_type = image_type;
+
+            let target_type = match ext {
+                "doc" => Some(TargetType::Doc),
+                "docx" => Some(TargetType::Doc),
+                "rtf" => Some(TargetType::Doc),
+                "txt" => Some(TargetType::Doc),
+                "pdf" => Some(TargetType::Doc),
+                "csv" => Some(TargetType::Data),
+                "json" => Some(TargetType::Data),
+                "xls" => Some(TargetType::Data),
+                "gif" => Some(TargetType::Image),
+                "jpg" => Some(TargetType::Image),
+                "jpeg" => Some(TargetType::Image),
+                "png" => Some(TargetType::Image),
+                "svg" => Some(TargetType::Image),
+                "ico" => Some(TargetType::Image),
+                "avif" => Some(TargetType::Image),
+                "webp" => Some(TargetType::Image),
+                "css" => Some(TargetType::Style),
+                "scss" => Some(TargetType::Style),
+                "sass" => Some(TargetType::Style),
+                "js" => Some(TargetType::Code),
+                "wasm" => Some(TargetType::Code),
+
+                _ => None,
+            };
+            el.target_type = target_type;
         }
     }
 

@@ -17,7 +17,7 @@ pub enum ImageType {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum SourceType {
+pub enum TargetType {
     /// image source
     Image,
     /// code source (e.g., JS, WASM, etc.)
@@ -26,6 +26,7 @@ pub enum SourceType {
     Style,
     /// link to a document source (e.g., word doc, pdf, etc.)
     Doc,
+    Data,
     /// another HTML page on the same site as currently scraped site
     HtmlSameSite,
     /// another HTML page but one which is on a different host than
@@ -99,7 +100,7 @@ pub struct Element {
     /// identifies the broad category of target that this url
     /// appears to be pointing at (e.g., )
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub target_type: Option<SourceType>,
+    pub target_type: Option<TargetType>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub image_type: Option<ImageType>,
