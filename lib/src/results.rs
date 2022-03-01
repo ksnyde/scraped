@@ -168,7 +168,7 @@ impl ScrapedResults {
                     // a list of selections
                     SelectionResult::List(list) => {
                         list.iter().for_each(|i| {
-                            if let Some(href) = &i.href {
+                            if let Some(href) = &i.full_href {
                                 children.push(href.to_string());
                             }
                         });

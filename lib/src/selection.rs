@@ -85,7 +85,7 @@ pub fn get_selection(el_ref: ElementRef, url: &Url) -> Element {
             el.href_type = Some(HrefType::Javascript);
         } else if href.trim().eq("#") {
             el.href_type = Some(HrefType::SelfReferencingAnchor);
-            el.full_href = Some(href.to_string());
+            el.full_href = Some(format!("{}", url));
         } else if href.starts_with('#') {
             el.href_type = Some(HrefType::AnchorLink);
             el.full_href = Some(format!("{}", url));
