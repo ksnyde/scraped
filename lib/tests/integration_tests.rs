@@ -1,32 +1,34 @@
+use bytes::Bytes;
 use claim::{assert_err, assert_ok};
 use color_eyre::{eyre::eyre, Result};
 use reqwest::header::HeaderMap;
 use scraped::{
+    concurrent::ConcurrentScrape,
     document::{Document, LoadedDocument},
     results::ScrapedResults,
 };
 use serde_json::{json, Value};
-use std::fs;
+use std::{fs, path::Path};
 use url::Url;
 
 /// loads any file in fixtures directory
-fn load_fixture<P: AsRef<Path>>(path: P) -> String {
-    let path: Path = "tests/fixtures/".join(path);
-    fs::read_to_string(path).expect(format!("Problem reading fixture file: {}", path))
-}
+// fn load_fixture<P: AsRef<Path>>(path: P) -> String {
+//     let path: Path = "tests/fixtures/".join(path);
+//     fs::read_to_string(path).expect(format!("Problem reading fixture file: {}", path))
+// }
 
 /// given a `Document` and HTML fixture, converts to a `LoadedDocument`
-fn load_document<'a, P: AsRef<Path>>(doc: &'a Document, fixture: P) -> LoadedDocument<'a> {
-    let body = load_fixture(fixture);
-    doc.provide_response(HeaderMap::new(), &body)
-}
+// fn load_document<'a, P: AsRef<Path>>(doc: &'a Document, fixture: P) -> LoadedDocument<'a> {
+//     let body = load_fixture(fixture);
+//     let headers = HeaderMap::new();
+//     doc.provide_response(headers, &body)
+// }
 
 fn load_simple_doc<'a>(doc: &'a Document) -> LoadedDocument<'a> {
-    load_document(doc, "simple-doc.html")
-    // let headers = HeaderMap::new();
-    // let body =
-    //     fs::read_to_string("tests/fixtures/simple-doc.html").expect("Problem reading fixture file");
-    // doc.provide_response(headers, &body)
+    let headers = HeaderMap::new();
+    let body =
+        fs::read_to_string("tests/fixtures/simple-doc.html").expect("Problem reading fixture file");
+    doc.provide_response(headers, &body)
 }
 
 #[test]
@@ -50,7 +52,8 @@ fn using_rust_selectors_on_simple_html_works_but_no_result_returned() -> Result<
     let result = ScrapedResults::from(&load_simple_doc(&doc));
     let valid_but_empty = result.get("structs");
     assert_ok!(&valid_but_empty);
-    assert_eq!(valid_but_empty.unwrap(), Value::Null);
+    assert!(valid_but_empty.unwrap().is_array());
+    // assert_eq!(valid_but_empty.unwrap(), 0);
 
     Ok(())
 }
@@ -117,6 +120,19 @@ fn serialized_results_avoid_empty_props() {
 }
 
 #[test]
-fn serilized_results_show_non_explicit_props() {
-    todo!();
+fn using_bytes() {
+    let mem = Bytes::from("hello world");
+    let slice = mem.slice(0..11);
+    let ambiguous_slice = mem.slice(..);
+    assert_eq!(slice, "hello world");
+    assert_eq!(ambiguous_slice, "hello world");
+}
+
+#[tokio::test]
+async fn concurrent_requests_work_on_happy_path() {
+    let mut t = ConcurrentScrape::new();
+    t.add_urls("https://google.com", "https://facebook.com");
+
+    let result = t.execute().await;
+    println!("yay! {:?}", result);
 }

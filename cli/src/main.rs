@@ -81,23 +81,22 @@ async fn main() -> Result<()> {
     // log to console
     show(&results, &args.show);
 
-    // process children
-    let _children = ConcurrentScrape::new();
-    if args.follow {
-        // TODO
-    }
-
-    match (&args.output, args.follow) {
-        (Some(v), false) => {
+    match (&args.output, args.follow, results.child_urls.is_some()) {
+        (Some(v), false, _) => {
             let results = serde_json::to_string(&results)?;
             fs::write(&v, results).await?;
         }
-        (Some(_v), true) => {
-            // println!(
-            //     "- Loading and parsing {} child nodes{}",
-            //     &doc.get_child_urls().len(),
-            //     if args.flatten { " [flatten] " } else { "" }
-            // );
+        (Some(v), true, true) => {
+            println!(
+                "- Scraping {} child nodes from {}",
+                &results.child_urls.unwrap().len(),
+                format!("{:?}", v)
+            );
+
+            // let children = ConcurrentScrape::new()
+            //     .add_urls(&results.child_urls)?
+            //     .scrape()
+            //     .await?;
 
             // let results = match (args.follow, args.flatten) {
             //     (true, true) => {

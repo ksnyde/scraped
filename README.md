@@ -17,6 +17,8 @@ This package was originally developed to help facilitate building search indexes
 
 ## Basic Flow of a Page Scrape
 
+### Before
+
 ```mermaid
 sequenceDiagram
     participant CLI
@@ -84,3 +86,41 @@ sequenceDiagram
       ```
 
     - We are now at the first "interesting phase" of this crate's existance. This is where you will _configure_ the results you're hoping to be able to scrape from the document.
+
+### After
+
+```mermaid
+sequenceDiagram
+    participant CLI
+    participant Document
+    participant Website
+    participant LoadedDoc
+    participant ParsedResults
+
+    autonumber
+
+    CLI->>Document: Document::new( url )
+    activate Document
+    Document-->>CLI: Document struct
+    Document-->>Document: add selectors
+    Document-->>Document: add properties
+
+    Document->>Website: Request Website (GET)
+    Website-->>Document: Header and Body Content
+    Document->>LoadedDoc: load_document()
+    deactivate Document
+
+    activate LoadedDoc
+    LoadedDoc->>LoadedDoc: parse HTML to DOM
+    LoadedDoc->>ParsedResults: convert LoadedDoc to results
+    deactivate LoadedDoc
+
+    activate ParsedResults
+
+    ParsedResults-->ParsedResults: generate selectors
+    ParsedResults-->ParsedResults: generate properties
+    ParsedResults-->ParsedResults: calc child_urls
+
+    ParsedResults->>CLI: all results available
+    deactivate ParsedResults
+```

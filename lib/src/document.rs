@@ -7,11 +7,11 @@ use color_eyre::{
 use core::fmt;
 use reqwest::{
     header::{HeaderMap, HeaderValue, AUTHORIZATION, USER_AGENT},
-    Client, StatusCode,
+    Client, Response, StatusCode,
 };
 use scraper::{Html, Selector};
 use serde_json::Value;
-use std::{collections::HashMap, fmt::Debug, fmt::Display};
+use std::{collections::HashMap, fmt::Debug, fmt::Display, future::Future};
 use url::Url;
 
 use crate::{
@@ -108,6 +108,27 @@ impl Document {
             req_headers: HeaderMap::new(),
             bearer_tokens: BearerTokens::new(),
         })
+    }
+
+    pub async fn build_request_client<F>(
+        &self,
+    ) -> impl Future<Output = Result<Response, reqwest::Error>>
+    where
+        F: Future<Output = Result<Response, reqwest::Error>>,
+    {
+        let client = Client::new();
+
+        let headers = match self.bearer_tokens.get(self.url.clone()) {
+            Some(token) => {
+                let mut h = self.req_headers.clone();
+                h.insert(AUTHORIZATION, token);
+                h
+            }
+            None => self.req_headers.clone(),
+        };
+
+        let client = client.get(self.url.clone()).headers(headers).send();
+        client
     }
 
     /// Add a selector for an item where the expectation is there is only one

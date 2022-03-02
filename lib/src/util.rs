@@ -3,6 +3,26 @@ use serde::Serialize;
 use std::collections::HashMap;
 use url::Url;
 
+pub struct UrlParse {
+    /// an array of successful URL parses
+    pub urls: Vec<Url>,
+    /// a tuple with the URL and then a human friendly error message
+    pub failures: Vec<(String, String)>,
+}
+
+pub fn parse_urls(candidates: Vec<&str>) -> UrlParse {
+    let mut urls = vec![];
+    let mut failures = vec![];
+    candidates.iter().for_each(|v| match Url::parse(v) {
+        Ok(url) => urls.push(url),
+        Err(e) => failures.push((
+            v.to_string(),
+            format!("Problems parsing URL[{}]: {:?}", v, e),
+        )),
+    });
+    UrlParse { urls, failures }
+}
+
 #[derive(Debug)]
 pub struct BearerTokens {
     /// a bearer token that should be used for ALL URL's
